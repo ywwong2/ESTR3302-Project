@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Course Multimedia Search</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <h1>Multimedia Search Engine</h1>
+      <p>Simple course-project demo UI</p>
+    </header>
+
+    <main class="container">
+      <section class="panel">
+        <h2>Search</h2>
+        <div class="search-row">
+          <input id="searchInput" type="text" placeholder="Semantic search (embeds your query)…" />
+          <button id="searchBtn">Search</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Upload Content</h2>
+        <div class="upload-row">
+          <input id="titleInput" type="text" placeholder="Optional title" />
+          <input id="fileInput" type="file" />
+          <button id="uploadBtn">Upload File</button>
+        </div>
+        <p class="hint">Supported: image / video / audio / text files.</p>
+        <hr style="border:none;border-top:1px solid var(--border);margin:12px 0" />
+        <p style="font-size:13px;color:var(--muted);margin:0 0 6px">Or paste text directly:</p>
+        <div class="upload-row">
+          <input id="textTitleInput" type="text" placeholder="Optional title" style="flex:0 0 180px" />
+          <textarea id="textArea" rows="3" placeholder="Type or paste text here…" style="flex:1;min-width:200px;border:1px solid var(--border);border-radius:8px;padding:10px;font-family:inherit;resize:vertical"></textarea>
+          <button id="textUploadBtn">Upload Text</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Results</h2>
+        <div id="results" class="results-grid"></div>
+      </section>
+
+      <section class="panel debug-panel">
+        <div class="debug-header">
+          <h2>🔍 Debug Log</h2>
+          <button id="clearLogBtn" class="clear-log-btn">Clear</button>
+        </div>
+        <div id="debugLog" class="debug-log"></div>
+      </section>
+    </main>
+
+    <div id="modal" class="modal hidden">
+      <div class="modal-content">
+        <button id="closeModal" class="close-btn">×</button>
+        <div id="modalBody"></div>
+      </div>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

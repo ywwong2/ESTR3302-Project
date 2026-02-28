@@ -1,0 +1,8 @@
+{
+  "modality": "text",
+  "normalized": true,
+  "max_chars": 4000,
+  "original_length": 16,
+  "final_length": 16,
+  "preview": "hello multimedia"
+}

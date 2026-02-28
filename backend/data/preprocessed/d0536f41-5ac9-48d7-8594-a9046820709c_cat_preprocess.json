@@ -1,0 +1,12 @@
+{
+  "modality": "image",
+  "target_size": [
+    224,
+    224
+  ],
+  "original_size": [
+    740,
+    991
+  ],
+  "processed_path": "/Users/wong/Documents/ESTR3302-Project/backend/data/preprocessed/d0536f41-5ac9-48d7-8594-a9046820709c_cat_224.jpg"
+}

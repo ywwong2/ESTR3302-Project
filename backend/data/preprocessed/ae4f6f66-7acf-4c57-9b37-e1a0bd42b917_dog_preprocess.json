@@ -1,0 +1,12 @@
+{
+  "modality": "image",
+  "target_size": [
+    224,
+    224
+  ],
+  "original_size": [
+    669,
+    1000
+  ],
+  "processed_path": "/Users/wong/Documents/ESTR3302-Project/backend/data/preprocessed/ae4f6f66-7acf-4c57-9b37-e1a0bd42b917_dog_224.jpg"
+}

@@ -1,0 +1,47 @@
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Model files
+models/
+
+# Hugging Face cache
+.hf-cache/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Environment variables
+.env
+.env.local
+
+# Runtime data
+backend/data/uploads/*
+!backend/data/uploads/.gitkeep
+
+# Logs
+*.log
+
+# Distribution
+*.tar.gz
+*.zip
+
+# Pytest
+.pytest_cache/
