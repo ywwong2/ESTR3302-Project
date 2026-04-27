@@ -1,0 +1,95 @@
+{
+  "cache_path": "dataset/cosine_cache_siglip.json",
+  "model_name": "google/siglip-base-patch16-224",
+  "queries": [
+    "cat",
+    "dog",
+    "plane",
+    "clothes",
+    "car"
+  ],
+  "temperature": 100.0,
+  "num_images": 50,
+  "top1_correct": 50,
+  "top1_accuracy": 1.0,
+  "mean_true_cosine": 0.0748098578,
+  "mean_top1_cosine": 0.0748098578,
+  "mean_margin_true_minus_best_wrong": 0.0645836984,
+  "mean_true_softmax_confidence": 0.9962911306153646,
+  "mean_top1_softmax_confidence": 0.9962911306153646,
+  "mean_reciprocal_rank": 1.0,
+  "confusion_matrix": {
+    "cat": {
+      "cat": 10,
+      "dog": 0,
+      "plane": 0,
+      "clothes": 0,
+      "car": 0
+    },
+    "dog": {
+      "cat": 0,
+      "dog": 10,
+      "plane": 0,
+      "clothes": 0,
+      "car": 0
+    },
+    "plane": {
+      "cat": 0,
+      "dog": 0,
+      "plane": 10,
+      "clothes": 0,
+      "car": 0
+    },
+    "clothes": {
+      "cat": 0,
+      "dog": 0,
+      "plane": 0,
+      "clothes": 10,
+      "car": 0
+    },
+    "car": {
+      "cat": 0,
+      "dog": 0,
+      "plane": 0,
+      "clothes": 0,
+      "car": 10
+    }
+  },
+  "per_category": {
+    "cat": {
+      "count": 10,
+      "top1_correct": 10,
+      "top1_accuracy": 1.0,
+      "mean_true_cosine": 0.084313045,
+      "mean_true_softmax_confidence": 0.9954102527210515
+    },
+    "dog": {
+      "count": 10,
+      "top1_correct": 10,
+      "top1_accuracy": 1.0,
+      "mean_true_cosine": 0.075585067,
+      "mean_true_softmax_confidence": 0.9917312889581902
+    },
+    "plane": {
+      "count": 10,
+      "top1_correct": 10,
+      "top1_accuracy": 1.0,
+      "mean_true_cosine": 0.088500864,
+      "mean_true_softmax_confidence": 0.9987232699920316
+    },
+    "clothes": {
+      "count": 10,
+      "top1_correct": 10,
+      "top1_accuracy": 1.0,
+      "mean_true_cosine": 0.052860829,
+      "mean_true_softmax_confidence": 0.9978110668091688
+    },
+    "car": {
+      "count": 10,
+      "top1_correct": 10,
+      "top1_accuracy": 1.0,
+      "mean_true_cosine": 0.072789484,
+      "mean_true_softmax_confidence": 0.9977797745963806
+    }
+  }
+}

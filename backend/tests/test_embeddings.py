@@ -1,7 +1,5 @@
 from backend.embeddings import (
-    MODEL_AUDIO,
     MODEL_IMAGE_VIDEO,
-    MODEL_TEXT,
     mean_pool,
     max_pool,
     _model_name_for,
@@ -22,6 +20,11 @@ def test_max_pool() -> None:
 
 def test_model_name_mapping() -> None:
     assert _model_name_for("image") == MODEL_IMAGE_VIDEO
-    assert _model_name_for("video") == MODEL_IMAGE_VIDEO
-    assert _model_name_for("audio") == MODEL_AUDIO
-    assert _model_name_for("text") == MODEL_TEXT
+
+
+def test_model_name_mapping_rejects_non_image() -> None:
+    try:
+        _model_name_for("audio")
+        assert False, "Expected ValueError for non-image media type"
+    except ValueError as exc:
+        assert "Unsupported media type" in str(exc)

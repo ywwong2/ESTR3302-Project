@@ -184,3 +184,19 @@ def get_embedding_record_by_media(media_id: str) -> dict[str, Any] | None:
     ).fetchone()
     conn.close()
     return dict(row) if row else None
+
+
+def list_embedding_records_by_media(media_id: str) -> list[dict[str, Any]]:
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT * FROM embedding_records WHERE media_id = ?", (media_id,)
+    ).fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+def delete_embedding_records_by_media(media_id: str) -> None:
+    conn = get_conn()
+    conn.execute("DELETE FROM embedding_records WHERE media_id = ?", (media_id,))
+    conn.commit()
+    conn.close()

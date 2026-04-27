@@ -3,9 +3,6 @@ const searchBtn = document.getElementById('searchBtn');
 const titleInput = document.getElementById('titleInput');
 const fileInput = document.getElementById('fileInput');
 const uploadBtn = document.getElementById('uploadBtn');
-const textTitleInput = document.getElementById('textTitleInput');
-const textArea = document.getElementById('textArea');
-const textUploadBtn = document.getElementById('textUploadBtn');
 const resultsEl = document.getElementById('results');
 const modal = document.getElementById('modal');
 const modalBody = document.getElementById('modalBody');
@@ -16,17 +13,12 @@ const mediaItems = [];
 
 const MODEL_NAMES = {
   image: 'SigLIP',
-  video: 'SigLIP',
-  audio: 'CLAP',
-  text: 'EmbeddingGemma',
 };
 
 function inferType(contentType) {
-  if (!contentType) return 'text';
+  if (!contentType) return 'image';
   if (contentType.startsWith('image/')) return 'image';
-  if (contentType.startsWith('video/')) return 'video';
-  if (contentType.startsWith('audio/')) return 'audio';
-  return 'text';
+  return 'image';
 }
 
 function normalizeItem(serverItem) {
@@ -58,28 +50,11 @@ function createPreview(item, large = false) {
   const wrap = document.createElement('div');
   wrap.className = 'preview';
 
-  if (item.type === 'image') {
-    const img = document.createElement('img');
-    img.src = item.url;
-    img.alt = item.title;
-    if (large) img.style.height = 'auto';
-    wrap.appendChild(img);
-  } else if (item.type === 'video') {
-    const video = document.createElement('video');
-    video.src = item.url;
-    video.controls = true;
-    if (!large) video.muted = true;
-    wrap.appendChild(video);
-  } else if (item.type === 'audio') {
-    const audio = document.createElement('audio');
-    audio.src = item.url;
-    audio.controls = true;
-    wrap.appendChild(audio);
-  } else {
-    const span = document.createElement('span');
-    span.textContent = '📄 Text File';
-    wrap.appendChild(span);
-  }
+  const img = document.createElement('img');
+  img.src = item.url;
+  img.alt = item.title;
+  if (large) img.style.height = 'auto';
+  wrap.appendChild(img);
 
   return wrap;
 }
@@ -273,6 +248,11 @@ uploadBtn.addEventListener('click', async () => {
   const file = fileInput.files[0];
   if (!file) { alert('Please select a file first.'); return; }
 
+  if (!file.type || !file.type.startsWith('image/')) {
+    alert('Only image files are supported.');
+    return;
+  }
+
   const formData = new FormData();
   formData.append('file', file);
   formData.append('title', titleInput.value.trim());
@@ -289,30 +269,6 @@ uploadBtn.addEventListener('click', async () => {
   } catch (err) {
     console.error(err);
     alert('Upload failed.');
-  }
-});
-
-// ── Pure text upload ─────────────────────────────────────────
-textUploadBtn.addEventListener('click', async () => {
-  const text = textArea.value.trim();
-  if (!text) { alert('Please enter some text first.'); return; }
-
-  try {
-    const res = await fetch(`${API_BASE}/media/upload/text`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, title: textTitleInput.value.trim() }),
-    });
-    if (!res.ok) throw new Error('Upload failed');
-    const data = await res.json();
-    mediaItems.unshift(normalizeItem(data.item));
-    render(mediaItems);
-    startPolling();
-    textTitleInput.value = '';
-    textArea.value = '';
-  } catch (err) {
-    console.error(err);
-    alert('Text upload failed.');
   }
 });
 

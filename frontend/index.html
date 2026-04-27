@@ -3,13 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Course Multimedia Search</title>
+    <title>Course Image Search</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <header class="topbar">
-      <h1>Multimedia Search Engine</h1>
-      <p>Simple course-project demo UI</p>
+      <h1>Image Search Engine</h1>
+      <p>ESTR3302 Project</p>
     </header>
 
     <main class="container">
@@ -25,17 +25,10 @@
         <h2>Upload Content</h2>
         <div class="upload-row">
           <input id="titleInput" type="text" placeholder="Optional title" />
-          <input id="fileInput" type="file" />
-          <button id="uploadBtn">Upload File</button>
+          <input id="fileInput" type="file" accept="image/*" />
+          <button id="uploadBtn">Upload Image</button>
         </div>
-        <p class="hint">Supported: image / video / audio / text files.</p>
-        <hr style="border:none;border-top:1px solid var(--border);margin:12px 0" />
-        <p style="font-size:13px;color:var(--muted);margin:0 0 6px">Or paste text directly:</p>
-        <div class="upload-row">
-          <input id="textTitleInput" type="text" placeholder="Optional title" style="flex:0 0 180px" />
-          <textarea id="textArea" rows="3" placeholder="Type or paste text here…" style="flex:1;min-width:200px;border:1px solid var(--border);border-radius:8px;padding:10px;font-family:inherit;resize:vertical"></textarea>
-          <button id="textUploadBtn">Upload Text</button>
-        </div>
+        <p class="hint">Supported: image files only.</p>
       </section>
 
       <section class="panel">

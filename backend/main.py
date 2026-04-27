@@ -3,12 +3,12 @@ from uuid import uuid4
 import math
 import threading
 
-from fastapi import FastAPI, Body, File, Form, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from backend.db import (
-    get_all_indexed_media,
+    delete_embedding_records_by_media,
     get_embedding_record_by_media,
     get_media,
     increment_likes,
@@ -16,6 +16,7 @@ from backend.db import (
     init_db,
     insert_embedding_record,
     insert_media,
+    list_embedding_records_by_media,
     list_media,
     now_iso,
     soft_delete_media,
@@ -24,7 +25,6 @@ from backend.db import (
 from backend.debug_log import log, get_logs
 from backend.embeddings import (
     cosine_similarity,
-    embed_query_audio,
     embed_query_text,
     generate_embedding,
     load_vector_file,
@@ -32,7 +32,7 @@ from backend.embeddings import (
 )
 from backend.preprocess import detect_media_type, run_preprocessing
 
-app = FastAPI(title="Course Multimedia Search API")
+app = FastAPI(title="Course Image Search API")
 
 app.add_middleware(
     CORSMiddleware,
@@ -137,51 +137,12 @@ async def upload_media(
     return {"message": "uploaded", "item": media}
 
 
-@app.post("/media/upload/text")
-async def upload_pure_text(
-    request: Request,
-    text: str = Body(..., embed=True),
-    title: str = Body("", embed=True),
-) -> dict:
-    """Upload raw text (no file needed). Saves as .txt and runs embedding pipeline."""
-    if not text.strip():
-        raise HTTPException(status_code=400, detail="Text cannot be empty")
-
-    media_id = str(uuid4())
-    safe_name = f"{media_id}_text.txt"
-    file_path = UPLOAD_DIR / safe_name
-    file_path.write_text(text, encoding="utf-8")
-    log(f"📥 Pure-text upload: '{(title or 'untitled')[:40]}' ({len(text)} chars)")
-
-    media = {
-        "id": media_id,
-        "media_type": "text",
-        "title": title.strip() or f"Text ({len(text)} chars)",
-        "stored_name": safe_name,
-        "file_path": str(file_path),
-        "status": "UPLOADED",
-        "created_at": now_iso(),
-        "updated_at": now_iso(),
-    }
-    insert_media(media)
-
-    threading.Thread(
-        target=_process_in_background,
-        args=(media_id, "text", file_path),
-        daemon=True,
-    ).start()
-
-    media["content_type"] = "text/plain"
-    media["url"] = str(request.url_for("uploads", path=safe_name))
-    return {"message": "uploaded", "item": media}
-
-
 @app.get("/search")
 def search(request: Request, q: str = "") -> dict:
     """
     If q is empty → return all items ordered by created_at DESC.
-    If q is given → embed the query, compute cosine similarity with each
-    indexed item, then rank by:
+        If q is given → embed the query with SigLIP text encoder, compute cosine
+        similarity with each indexed image, then rank by:
       final_score = 0.6*cosine_sim + 0.1*log(1+views+2*likes)
                   + 0.1*(1/(1+days_since_upload))
                   + 0.1*(ctr + 0.5*avg_watch_time)
@@ -193,7 +154,7 @@ def search(request: Request, q: str = "") -> dict:
 
     # No query → return everything (title-filtered if needed)
     if not q:
-        rows = list_media(query="")
+        rows = [row for row in list_media(query="") if row.get("media_type") == "image"]
         for row in rows:
             row["content_type"] = f"{row['media_type']}/*"
             row["url"] = str(request.url_for("uploads", path=row["stored_name"]))
@@ -202,13 +163,12 @@ def search(request: Request, q: str = "") -> dict:
             _attach_days(row)
         return {"items": rows}
 
-    # Embed the query with SigLIP text encoder (for image/video/text matching)
+    # Embed the query with SigLIP text encoder.
     log(f"🔎 Search query: '{q}'")
-    query_vec_siglip = embed_query_text(q)
-    query_vec_clap = None  # lazy: only embed with CLAP if audio items exist
+    query_vec = embed_query_text(q)
 
     # Retrieve all non-deleted items
-    all_items = list_media(query="")
+    all_items = [item for item in list_media(query="") if item.get("media_type") == "image"]
     scored = []
     unscored = []
 
@@ -235,16 +195,6 @@ def search(request: Request, q: str = "") -> dict:
             _attach_days(item)
             unscored.append(item)
             continue
-
-        # Pick the right query embedding for this item's modality
-        if item["media_type"] == "audio":
-            # CLAP text encoder → same space as CLAP audio embeddings
-            if query_vec_clap is None:
-                query_vec_clap = embed_query_audio(q)
-            query_vec = query_vec_clap
-        else:
-            # SigLIP text encoder → same space as SigLIP image/text embeddings
-            query_vec = query_vec_siglip
 
         cos_sim = cosine_similarity(query_vec, stored_vec)
 
@@ -315,14 +265,7 @@ def get_media_detail(media_id: str, request: Request) -> dict:
     if not item:
         raise HTTPException(status_code=404, detail="Media not found")
     item["url"] = str(request.url_for("uploads", path=item["stored_name"]))
-    # Attach embedding records if any
-    from backend.db import get_conn
-    conn = get_conn()
-    rows = conn.execute(
-        "SELECT * FROM embedding_records WHERE media_id = ?", (media_id,)
-    ).fetchall()
-    conn.close()
-    item["embeddings"] = [dict(r) for r in rows]
+    item["embeddings"] = list_embedding_records_by_media(media_id)
     return item
 
 
@@ -338,6 +281,13 @@ def delete_media(media_id: str) -> dict:
     item = get_media(media_id)
     if not item:
         raise HTTPException(status_code=404, detail="Media not found")
+
+    # Delete stored vectors and embedding metadata before soft delete.
+    for emb in list_embedding_records_by_media(media_id):
+        vec_path = VECTOR_DIR / f"{emb['vector_id']}.json"
+        if vec_path.exists():
+            vec_path.unlink()
+    delete_embedding_records_by_media(media_id)
 
     file_path = Path(item["file_path"])
     if file_path.exists():

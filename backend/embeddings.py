@@ -9,30 +9,20 @@ from typing import Any
 from backend.debug_log import log
 
 MODEL_IMAGE_VIDEO = "google/siglip-base-patch16-224"
-MODEL_AUDIO = "laion/clap-htsat-unfused"
-MODEL_TEXT = "google/embeddinggemma-300m"
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 MODELS_DIR = PROJECT_ROOT / "models"
 LOCAL_MODEL_DIRS = {
     MODEL_IMAGE_VIDEO: MODELS_DIR / "siglip-base-patch16-224",
-    MODEL_AUDIO: MODELS_DIR / "clap-htsat-unfused",
-    MODEL_TEXT: MODELS_DIR / "embeddinggemma-300m",
 }
 
 VECTOR_DIMENSIONS = {
     "image": 768,
-    "video": 768,
-    "audio": 512,
-    "text": 768,
 }
 
 # Lazy-loaded model singletons
 _SIGLIP_MODEL = None
 _SIGLIP_PROCESSOR = None
-_CLAP_MODEL = None
-_CLAP_PROCESSOR = None
-_TEXT_MODEL = None
 
 
 def _resolve_model_source(model_name: str) -> str:
@@ -73,41 +63,6 @@ def _load_siglip():
     return _SIGLIP_MODEL, _SIGLIP_PROCESSOR
 
 
-def _load_clap():
-    global _CLAP_MODEL, _CLAP_PROCESSOR
-    if _CLAP_MODEL is None:
-        import torch
-        from transformers import AutoProcessor, ClapModel
-
-        source = _resolve_model_source(MODEL_AUDIO)
-        log(f"[DEBUG] Loading CLAP model from: {source}")
-        t0 = time.time()
-        _CLAP_PROCESSOR = AutoProcessor.from_pretrained(source)
-        log(f"[DEBUG] CLAP processor loaded in {time.time()-t0:.1f}s")
-        t1 = time.time()
-        _CLAP_MODEL = ClapModel.from_pretrained(source)
-        _CLAP_MODEL.eval()
-        log(f"[DEBUG] CLAP model loaded in {time.time()-t1:.1f}s")
-    else:
-        log("[DEBUG] CLAP model already cached")
-    return _CLAP_MODEL, _CLAP_PROCESSOR
-
-
-def _load_text_model():
-    global _TEXT_MODEL
-    if _TEXT_MODEL is None:
-        from sentence_transformers import SentenceTransformer
-
-        source = _resolve_model_source(MODEL_TEXT)
-        log(f"[DEBUG] Loading EmbeddingGemma model from: {source}")
-        t0 = time.time()
-        _TEXT_MODEL = SentenceTransformer(source, device="cpu")
-        log(f"[DEBUG] EmbeddingGemma model loaded in {time.time()-t0:.1f}s")
-    else:
-        log("[DEBUG] EmbeddingGemma model already cached")
-    return _TEXT_MODEL
-
-
 # ── Per-modality embedding functions ─────────────────────────
 
 
@@ -138,62 +93,6 @@ def _embed_image(file_path: Path, preprocess_result: dict[str, Any]) -> list[flo
         raise
 
 
-def _embed_audio(file_path: Path, preprocess_result: dict[str, Any]) -> list[list[float]]:
-    import torch
-    import torchaudio
-
-    log(f"[DEBUG] _embed_audio called for: {file_path}")
-    model, processor = _load_clap()
-    log(f"[DEBUG] Loading audio waveform...")
-    waveform, sr = torchaudio.load(str(file_path))
-    log(f"[DEBUG] Waveform loaded: shape={waveform.shape}, sr={sr}")
-    if waveform.shape[0] > 1:
-        waveform = waveform.mean(dim=0, keepdim=True)
-    if sr != 48000:
-        waveform = torchaudio.functional.resample(waveform, sr, 48000)
-        sr = 48000
-    audio = waveform.squeeze(0).tolist()
-
-    chunks = preprocess_result.get("chunks", [{"start": 0.0, "end": len(audio) / sr}])
-    vectors = []
-    for chunk in chunks:
-        start = int(chunk["start"] * sr)
-        end = int(chunk["end"] * sr)
-        audio_chunk = audio[start:end] or [0.0] * sr
-        inputs = processor(audios=audio_chunk, sampling_rate=sr, return_tensors="pt")
-        with torch.no_grad():
-            features = model.get_audio_features(**inputs)[0].tolist()
-        vectors.append(_l2_normalize(features))
-    return vectors
-
-
-def _embed_video(file_path: Path, preprocess_result: dict[str, Any]) -> list[list[float]]:
-    timestamps = preprocess_result.get("timestamps_sec", [0.0])
-    # Frame extraction not yet implemented; replicate image embedding per timestamp
-    image_vec = _embed_image(file_path, preprocess_result)
-    return [image_vec[:] for _ in timestamps]
-
-
-def _embed_text(file_path: Path) -> list[float]:
-    """Embed text content using SigLIP's text encoder (shared space with images)."""
-    import torch
-
-    log(f"[DEBUG] _embed_text (SigLIP) called for: {file_path}")
-    model, processor = _load_siglip()
-    text = file_path.read_text(encoding="utf-8", errors="ignore").strip() or " "
-    log(f"[DEBUG] Text length: {len(text)} chars, encoding with SigLIP text encoder...")
-    t0 = time.time()
-    inputs = processor(text=[text], return_tensors="pt", padding="max_length", truncation=True)
-    with torch.no_grad():
-        out = model.get_text_features(**inputs)
-        if hasattr(out, "pooler_output"):
-            vec = out.pooler_output[0].tolist()
-        else:
-            vec = out[0].tolist()
-    log(f"[DEBUG] SigLIP text encoding done in {time.time()-t0:.1f}s, dim={len(vec)}")
-    return _l2_normalize(vec)
-
-
 # ── Pooling ──────────────────────────────────────────────────
 
 
@@ -211,11 +110,9 @@ def max_pool(vectors: list[list[float]]) -> list[float]:
 
 
 def _model_name_for(media_type: str) -> str:
-    if media_type in {"image", "video", "text"}:
+    if media_type == "image":
         return MODEL_IMAGE_VIDEO
-    if media_type == "audio":
-        return MODEL_AUDIO
-    return MODEL_IMAGE_VIDEO
+    raise ValueError(f"Unsupported media type: {media_type}")
 
 
 def generate_embedding(
@@ -233,12 +130,6 @@ def generate_embedding(
 
     if media_type == "image":
         segment_vectors = [_embed_image(file_path, preprocess_result)]
-    elif media_type == "video":
-        segment_vectors = _embed_video(file_path, preprocess_result)
-    elif media_type == "audio":
-        segment_vectors = _embed_audio(file_path, preprocess_result)
-    elif media_type == "text":
-        segment_vectors = [_embed_text(file_path)]
     else:
         raise ValueError(f"Unsupported media type: {media_type}")
 
@@ -289,7 +180,7 @@ def cosine_similarity(a: list[float], b: list[float]) -> float:
 
 
 def embed_query_text(query: str) -> list[float]:
-    """Embed a search query using SigLIP's text encoder (shared space with images & text)."""
+    """Embed a search query using SigLIP text encoder (shared space with images)."""
     import torch
 
     log(f"[SEARCH] Embedding query with SigLIP text encoder: '{query[:80]}'")
@@ -303,19 +194,4 @@ def embed_query_text(query: str) -> list[float]:
         else:
             vec = out[0].tolist()
     log(f"[SEARCH] SigLIP query embedded in {time.time()-t0:.1f}s, dim={len(vec)}")
-    return _l2_normalize(vec)
-
-
-def embed_query_audio(query: str) -> list[float]:
-    """Embed a search query using CLAP's text encoder (shared space with audio)."""
-    import torch
-
-    log(f"[SEARCH] Embedding query with CLAP text encoder: '{query[:80]}'")
-    t0 = time.time()
-    model, processor = _load_clap()
-    inputs = processor(text=[query], return_tensors="pt", padding=True)
-    with torch.no_grad():
-        text_features = model.get_text_features(**inputs)
-        vec = text_features[0].tolist()
-    log(f"[SEARCH] CLAP query embedded in {time.time()-t0:.1f}s, dim={len(vec)}")
     return _l2_normalize(vec)

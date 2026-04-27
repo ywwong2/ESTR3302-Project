@@ -1,376 +1,173 @@
-# Multimedia Search Engine — AI-Executable TODO Plan
+# Image Retrieval and Ranking Simulation — AI TODO Plan
 
-## How to use this file
-- Each task is small and testable.
-- Complete tasks in order.
-- Do not move to next task until **Definition of Done** is satisfied.
-- Keep all code, configs, and docs under version control.
-
----
-
-## 0) Project setup and architecture
-
-### 0.1 Create repository structure
-- [ ] Create folders:
-  - `backend/`
-  - `frontend/`
-  - `worker/`
-  - `infra/`
-  - `docs/`
-  - `data/` (local dev only)
-- [ ] Add top-level files:
-  - `.gitignore`
-  - `README.md`
-  - `.env.example`
-  - `docker-compose.yml`
-
-**Definition of Done**
-- Folder structure exists.
-- Project starts with placeholder services.
-
-### 0.2 Choose baseline stack
-- [ ] Backend API: FastAPI (Python)
-- [ ] Frontend: Next.js or React + Vite
-- [ ] Worker queue: Celery/RQ (or simple background tasks first)
-- [ ] Metadata DB: PostgreSQL
-- [ ] Vector DB: Chroma
-- [ ] Cache (future): Redis (design now, implement later)
-
-**Definition of Done**
-- Tech stack recorded in `docs/architecture.md`.
-- Initial dependency files created (`requirements.txt`, `package.json`).
-
-### 0.3 Define system boundaries
-- [ ] Draw high-level flow:
-  1) upload media → 2) preprocess → 3) embed → 4) store vector + metadata → 5) query → 6) rank → 7) display
-- [ ] Define API boundaries between frontend, backend, workers.
-
-**Definition of Done**
-- Sequence diagram saved in `docs/architecture.md`.
+## Scope lock
+- Project is now image-only.
+- Frontend-backend demo must keep working.
+- Research focus is mathematical ranking and simulation.
+- No embedding cache layer beyond persistent indexed vectors.
 
 ---
 
-## 1) Data model and schema
+## 0) Baseline cleanup
 
-### 1.1 Define core entities
-- [x] `MediaItem` (id, type, uri/path, title, description, tags, uploader, timestamps)
-- [x] `EmbeddingRecord` (media_id, modality, model_name, vector_dim, vector_id, created_at)
-- [x] `QualitySignal` (media_id, quality_score, source)
-- [x] `InteractionLog` (user_id/session_id, media_id, action, dwell_time, timestamp)
-- [x] `StatsSnapshot` (media_id, views, likes, ctr, avg_watch_time)
+### 0.1 Remove non-image code paths
+- [ ] Remove audio/video/text preprocessing branches.
+- [ ] Remove CLAP and non-image embedding branches.
+- [ ] Remove pure text upload endpoint and UI controls.
 
 **Definition of Done**
-- ER diagram and SQL schema in `docs/schema.md`.
-- Migration scripts prepared.
+- Backend accepts `image/*` only.
+- Frontend only exposes image upload.
+- Search still works end-to-end.
 
-### 1.2 Define media lifecycle
-- [x] Status states: `UPLOADED`, `PROCESSING`, `INDEXED`, `FAILED`, `DELETED`
-- [x] Soft-delete + hard-delete policy
-- [x] Re-index policy when model changes
+### 0.2 Keep essential runtime paths
+- [ ] Keep routes: `GET /search`, `POST /media/upload`, `POST /media/{id}/like`, `POST /media/{id}/view`, `GET /media/{id}`, `DELETE /media/{id}`, `GET /debug/logs`.
+- [ ] Keep upload -> background processing -> indexed lifecycle.
+- [ ] Keep result card fields used by frontend (`id`, `title`, `media_type`, `url`, `status`, metrics).
 
 **Definition of Done**
-- Lifecycle states documented and represented in DB.
+- All frontend buttons still function.
+- No broken API calls from frontend console.
 
 ---
 
-## 2) Ingestion and preprocessing pipeline
+## 1) Image embedding and retrieval core
 
-### 2.1 File upload API
-- [x] `POST /media/upload` for image/video/audio/text
-- [x] Insert metadata row + status `UPLOADED`
+### 1.1 SigLIP pipeline
+- [ ] Keep SigLIP image embedding for indexed images.
+- [ ] Keep SigLIP text embedding for query.
+- [ ] Keep cosine similarity search and ranking output fields.
 
-**Definition of Done**
-- Upload works for all modalities.
-- Invalid files rejected with clear error messages.
-
-### 2.2 Preprocessing per modality
-
-#### Video preprocessing
-- [x] Uniform frame sampling:
-  - target 8–16 frames per video
-  - roughly every 1–2 seconds
-- [x] Resize/normalize frames for image model input
-- [x] Keep frame timestamps for optional explainability
-
-#### Audio preprocessing
-- [x] Split audio into ~10 equal chunks
-- [x] Convert to required sample rate/channels for CLAP
-- [x] Handle short audio gracefully (pad/merge strategy)
-
-#### Image preprocessing
-- [x] Resize/downsample to model input (e.g., 224x224 for SigLIP base patch16)
-- [x] Normalize with model-specific preprocessing
-
-#### Text preprocessing
-- [x] Normalize Unicode
-- [x] Trim extreme length
+### 1.2 Persistent vector storage
+- [ ] Keep stored vectors for indexed images.
+- [ ] Remove extra cache logic and unused cache docs/tasks.
+- [ ] Ensure delete also removes embedding metadata and vector file.
 
 **Definition of Done**
-- Each modality has deterministic preprocessing and unit tests.
+- Uploading an image eventually becomes `INDEXED`.
+- Query returns ranked image list with stable scores.
+- Deleted image never appears in search.
 
 ---
 
-## 3) Embedding generation
+## 2) Ranking function implementation (online system)
 
-### 3.1 Model integration
-- [x] Image/video frames: `google/siglip-base-patch16-224`
-- [x] Audio chunks: CLAP model
-- [x] Text: `google/embeddinggemma-300m`
+At round $t$, for user $u$ and image $i$, use:
+$$
+\mathbf{x}_{ui}^{(t)} = [\mathrm{cos}_{ui}, f_i^{(t)}, \widetilde{\mathrm{LR}}_i^{(t-1)}, \widetilde{\mathrm{CTR}}_i^{(t-1)}, \widetilde{\mathrm{AWT}}_i^{(t-1)}, b_i^{(t-1)}]^\top \in \mathbb{R}^6,
+$$
+$$
+S_{ui}^{(t)} = \mathbf{w}^\top \mathbf{x}_{ui}^{(t)}, \quad \mathbf{w} \in \Delta.
+$$
 
-**Definition of Done**
-- Model wrappers return fixed-length vectors and pass smoke tests.
-
-### 3.2 Pooling strategies
-- [x] Video: mean pooling over sampled frame embeddings (support max pooling option)
-- [x] Audio: mean pooling over 10 chunk embeddings
-- [x] Track per-item pooling metadata (`pooling_type`, `num_segments`)
-
-**Definition of Done**
-- Final vector produced for every media item.
-- Pooling strategy configurable.
-
-### 3.3 Batch indexing worker
-- [ ] Worker consumes pending media (`UPLOADED`/`PROCESSING`)
-- [ ] Retry on transient failures
-- [ ] Write failure reason for debugging
+### 2.1 Historical signal updates
+- [ ] Maintain EWMA counts for examinations/views/likes:
+  $\tilde{N}_i^{(t)}=(1-\rho)\tilde{N}_i^{(t-1)}+\rho N_i^{(t)}$.
+- [ ] Compute Bayesian-smoothed metrics:
+  $\widetilde{\mathrm{CTR}}_i^{(t)}=\frac{\tilde{V}_i^{(t)}+c_{\mathrm{ctr}}m_{\mathrm{ctr}}}{\tilde{E}_i^{(t)}+c_{\mathrm{ctr}}}$,
+  $\widetilde{\mathrm{LR}}_i^{(t)}=\frac{\tilde{L}_i^{(t)}+c_{\mathrm{lr}}m_{\mathrm{lr}}}{\tilde{V}_i^{(t)}+c_{\mathrm{lr}}}$.
+- [ ] Update AWT and social proof:
+  $\widetilde{\mathrm{AWT}}_i^{(t)}=(1-\rho)\widetilde{\mathrm{AWT}}_i^{(t-1)}+\rho\bar{T}_i^{(t)}$,
+  $b_i^{(t)}=\min\left(1,\frac{\ln(1+\tilde{V}_i^{(t)}+\omega_l\tilde{L}_i^{(t)})}{M}\right)$.
 
 **Definition of Done**
-- End-to-end indexing completes asynchronously.
+- Backend ranking state is deterministic for fixed seed/data.
+- Metrics remain bounded and numerically stable.
 
 ---
 
-## 4) Storage layer (metadata + vectors)
+## 3) User behavior simulation (backend only)
 
-### 4.1 Chroma integration
-- [ ] Create collection strategy (single collection with modality metadata OR per modality)
-- [ ] Store:
-  - `id` (media_id or embedding_id)
-  - `embedding`
-  - metadata: `media_type`, `title`, `tags`, `created_at`, `quality_score`, etc.
-- [ ] Implement upsert and delete-by-id
+### 3.1 Simulation engine
+- [ ] Assign latent quality $q_i \sim \mathrm{Beta}(2,5)$ for each image.
+- [ ] Apply examination model with position bias:
+  $\eta_r=(1+r)^{-\gamma_{\mathrm{pos}}}$.
+- [ ] Sample user events for displayed images:
+  - view $V$ via Bernoulli on logistic score,
+  - watch time $T$ via Beta,
+  - like $L$ via Bernoulli with watch-time gating.
+- [ ] Include user-specific random effects $\xi_u$.
+
+### 3.2 Training with empirical policy gradient
+- [ ] Use observed reward:
+  $R_{ui}^{(t)}=\lambda_v V_{ui}^{(t)}+\lambda_t T_{ui}^{(t)}+\lambda_l L_{ui}^{(t)}$.
+- [ ] Use soft-max exposure policy:
+  $a_{ui}^{(t)}(\mathbf{w})=\frac{\exp(\tau S_{ui}^{(t)})}{\sum_j \exp(\tau S_{uj}^{(t)})}$.
+- [ ] Optimize objective:
+  $F_t(\mathbf{w})=-\frac{1}{|\mathcal{B}_t|}\sum_u\sum_i a_{ui}^{(t)}R_{ui}^{(t)} + \beta\|\mathbf{w}\|_2^2$,
+  with default $\beta=0$ and CLI override.
+- [ ] Update with projected gradient descent on simplex:
+  $\mathbf{w}^{(t+1)}=\Pi_\Delta(\mathbf{w}^{(t)}-\eta\nabla F_t(\mathbf{w}^{(t)}))$.
+
+### 3.3 Experiment defaults
+- [ ] Dataset scale: 50 images, 5 categories, balanced 10 each.
+- [ ] Simulation scale: $|U|=1000$, $T=1000$, batch size 32, top-$K=10$.
+- [ ] Initialize weights uniformly: $\mathbf{w}^{(0)}=[1/6,\dots,1/6]^\top$.
+- [ ] Use priors/hyperparameters from latest plan (CTR/LR priors, $\rho$, $\omega_l$, $M$, $\gamma_{\mathrm{pos}}$, $\kappa$, $\eta$, $\tau$).
+
+### 3.4 Artifacts
+- [ ] Save per-round CSV logs.
+- [ ] Save reward and weight trajectory PNG plots.
+- [ ] Print final simplex-valid weights and key aggregate metrics.
 
 **Definition of Done**
-- Search and delete work correctly in Chroma.
-
-### 4.2 Relational DB integration
-- [ ] Persist media metadata and ranking signals in PostgreSQL
-- [ ] Ensure vector record references are consistent with Chroma IDs
-
-**Definition of Done**
-- DB and vector store stay consistent after upload/update/delete.
-
-### 4.3 Delete flow
-- [ ] `DELETE /media/{id}`
-- [ ] Remove from Chroma + metadata DB + file storage
-- [ ] Add tombstone/audit log
-
-**Definition of Done**
-- Deleted items never appear in search.
+- One command runs simulation without frontend.
+- CSV and PNG outputs generated in output folder.
+- Weight vector stays on simplex across rounds.
 
 ---
 
-## 5) Search API (retrieval)
+## 4) Frontend and API demo integrity
 
-### 5.1 Query embedding
-- [ ] `POST /search` accepts text query
-- [ ] Convert query text to embedding (text model)
+### 4.1 Keep demo interactive
+- [ ] Search button still triggers backend search.
+- [ ] Upload button supports image files only.
+- [ ] Like, info, delete buttons still work correctly.
+- [ ] Status overlays still update via polling.
 
-### 5.2 Candidate retrieval
-- [ ] Run vector similarity search (top-K, e.g., 100)
-- [ ] Return candidate list with raw similarity score
-
-### 5.3 Filtering
-- [ ] Add filters: modality, date range, tags, uploader
-- [ ] Exclude deleted/blocked content
+### 4.2 Keep response compatibility
+- [ ] Preserve fields used by cards/metrics.
+- [ ] Preserve debug panel polling endpoint.
 
 **Definition of Done**
-- API returns stable candidate set with filters.
+- Manual smoke test passes for: upload image -> indexed -> search -> like -> info -> delete.
 
 ---
 
-## 6) Ranking system
+## 5) Test and documentation updates
 
-### 6.1 Baseline weighted ranking
-- [ ] Implement score formula:
+### 5.1 Tests
+- [ ] Rewrite preprocessing tests for image-only behavior.
+- [ ] Rewrite upload tests for image accept / non-image reject.
+- [ ] Keep/adjust embedding utility tests for image-only mapping.
+- [ ] Add simulation smoke test (short rounds) if runtime permits.
 
-  `final_score = 0.6*cosine_sim + 0.1*log(1+views+2*likes) + 0.1*(1/(1+days_since_upload)) + 0.1*quality_score_norm + 0.1*(ctr + 0.5*avg_watch_time_norm)`
-
-- [ ] Normalize all non-similarity signals to consistent ranges
-- [ ] Add guardrails for missing values
-
-**Definition of Done**
-- Ranking service outputs deterministic sorted list.
-
-### 6.2 Quality score pipeline
-- [ ] Define `quality_score` source:
-  - manual annotation OR heuristic model
-- [ ] Backfill for existing content
+### 5.2 Docs
+- [ ] Rewrite README to image-only architecture and runbook.
+- [ ] Update schema doc to minimal entities currently used.
+- [ ] Document simulation command and outputs.
 
 **Definition of Done**
-- Every searchable item has a quality score.
-
-### 6.3 Interaction logging
-- [ ] Log events: impression, click, like, watch_time
-- [ ] Aggregate periodic stats (ctr, avg_watch_time)
-
-**Definition of Done**
-- Ranking reads fresh user-behavior features from DB.
-
-### 6.4 Learning-to-rank (optional phase)
-- [ ] Export training dataset from logs
-- [ ] Train XGBoost reg/rank model
-- [ ] Compare against weighted baseline with offline metrics
-
-**Definition of Done**
-- Documented A/B decision for baseline vs learned model.
+- `pytest backend/tests -v` passes.
+- README instructions match actual commands and routes.
 
 ---
 
-## 7) Web UI
+## 6) Milestone schedule
 
-### 7.1 Core search interface
-- [ ] Search bar with submit + keyboard support
-- [ ] Filter panel (modality/date/tags)
-- [ ] Sort options (relevance/newest/popularity)
+### Milestone 1
+- [ ] Complete sections 0-1 (core simplification + image retrieval path).
 
-### 7.2 Result rendering
-- [ ] Card/grid view with thumbnail, title, snippet, score indicators
-- [ ] Media-specific preview:
-  - image thumbnail
-  - video preview frame and duration
-  - audio waveform/icon and duration
-  - text snippet highlight
+### Milestone 2
+- [ ] Complete section 3 (simulation + training loop + outputs).
 
-### 7.3 Detail page
-- [ ] Show metadata + engagement info
-- [ ] Play/view content
-- [ ] Emit interaction events (click/view/watch time)
-
-**Definition of Done**
-- User can search, open results, and interactions are logged.
+### Milestone 3
+- [ ] Complete sections 4-5 (UI/API regression + tests/docs finalization).
 
 ---
 
-## 8) Evaluation and quality assurance
-
-### 8.1 Build evaluation dataset
-- [ ] Collect representative queries
-- [ ] Label relevant items (topical relevance)
-
-### 8.2 Offline retrieval metrics
-- [ ] Compute Recall@K, Precision@K, nDCG@K
-- [ ] Measure per-modality performance
-
-### 8.3 Ranking metrics
-- [ ] CTR uplift proxy (offline replay if available)
-- [ ] Diversity and freshness checks
-
-### 8.4 Latency and scalability
-- [ ] Measure p50/p95 for upload/index/search
-- [ ] Test with increasing corpus size
-
-**Definition of Done**
-- Evaluation report in `docs/evaluation.md`.
-
----
-
-## 9) Reliability, observability, and security
-
-### 9.1 Observability
-- [ ] Structured logging for API + workers
-- [ ] Metrics: indexing throughput, search latency, failure rates
-- [ ] Basic dashboard and alert thresholds
-
-### 9.2 Reliability
-- [ ] Idempotent indexing jobs
-- [ ] Dead-letter handling for failed tasks
-- [ ] Backup/restore for DB and vector store
-
-### 9.3 Security and governance
-- [ ] File scanning, MIME validation
-- [ ] Auth for upload/delete endpoints
-- [ ] Access control for private media
-
-**Definition of Done**
-- System can recover from common failures and has auditability.
-
----
-
-## 10) Deployment
-
-### 10.1 Containerization
-- [ ] Dockerfiles for backend/frontend/worker
-- [ ] Compose for local development (Postgres + Chroma + app services)
-
-### 10.2 Environment configuration
-- [ ] `.env` keys documented
-- [ ] Separate dev/staging/prod configs
-
-### 10.3 CI/CD
-- [ ] Lint + test + build pipeline
-- [ ] Auto migration and deployment strategy
-
-**Definition of Done**
-- One command deploy for dev; documented production path.
-
----
-
-## 11) Future cache design (Redis-ready)
-
-### 11.1 Query result caching
-- [ ] Cache key design: hash(query + filters + page + model_version)
-- [ ] TTL strategy and invalidation conditions
-
-### 11.2 Embedding cache
-- [ ] Cache repeated query embeddings
-- [ ] Invalidate on embedding model update
-
-**Definition of Done**
-- Redis integration design doc in `docs/cache-design.md`.
-
----
-
-## 12) AI execution checklist (strict order)
-
-- [ ] A1: Create project scaffolding and docs skeleton
-- [ ] A2: Implement upload + metadata persistence
-- [ ] A3: Implement preprocessing for all modalities
-- [ ] A4: Integrate embedding models and pooling
-- [ ] A5: Write vectors to Chroma + metadata to Postgres
-- [ ] A6: Implement search API and candidate retrieval
-- [ ] A7: Implement ranking formula and signal normalization
-- [ ] A8: Build frontend search UI and result pages
-- [ ] A9: Add interaction logging and aggregation jobs
-- [ ] A10: Add evaluation scripts and report generation
-- [ ] A11: Add monitoring, retries, and delete consistency checks
-- [ ] A12: Containerize and document deployment
-
-**Definition of Done**
-- Each A-task has:
-  - code
-  - tests
-  - docs update
-  - demo evidence (API response screenshot/log/UI capture)
-
----
-
-## Suggested milestone schedule
-
-### Milestone 1 (Week 1–2)
-- A1–A3 complete
-
-### Milestone 2 (Week 3–4)
-- A4–A6 complete
-
-### Milestone 3 (Week 5–6)
-- A7–A9 complete
-
-### Milestone 4 (Week 7–8)
-- A10–A12 complete + final polish
-
----
-
-## Notes for model/version control
-- Track embedding model version in every indexed row.
-- Re-index content when model or preprocessing changes.
-- Keep reproducibility metadata: random seeds, sampling strategy, chunk sizes.
+## Optional future appendix (out of current scope)
+- Optional migration from JSON vector files to dedicated vector DB.
+- Optional offline evaluation expansion (`Recall@K`, `nDCG@K`, category fairness).
+- Optional learned ranker baseline comparison (e.g., XGBoost) after simulation baseline is stable.
+- Optional auth/security hardening for production deployment.

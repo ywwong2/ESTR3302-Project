@@ -1,0 +1,51 @@
+image_id,relative_path,true_category,predicted_category,top1_correct,true_cosine,pred_cosine,margin_true_minus_best_wrong,rank_of_true,true_softmax_confidence,top1_softmax_confidence
+0,cats/Cat-on-couch.jpg,cat,cat,1,0.08322718,0.08322718,0.05563847,1,0.9954177,0.9954177
+1,cats/NationalGeographic_2572187_16x9.avif,cat,cat,1,0.08743429,0.08743429,0.06119949,1,0.9975798,0.9975798
+2,cats/Orange-colored-cat-yawns-displaying-teeth.webp,cat,cat,1,0.08950431,0.08950431,0.06526273,1,0.99830276,0.99830276
+3,cats/cat-behavior-schertz-tx.webp,cat,cat,1,0.07881696,0.07881696,0.05624194,1,0.99507021,0.99507021
+4,cats/cat.avif,cat,cat,1,0.083973,0.083973,0.0521606,1,0.99311048,0.99311048
+5,cats/ec9h-how-to-care-for-a-kitten-or-cat-hero-new-resized.png,cat,cat,1,0.08069088,0.08069088,0.05742917,1,0.99577053,0.99577053
+6,cats/images (1) copy 2.jpeg,cat,cat,1,0.0933825,0.0933825,0.05928007,1,0.99617798,0.99617798
+7,cats/images (1) copy.jpeg,cat,cat,1,0.08480639,0.08480639,0.05637527,1,0.99589373,0.99589373
+8,cats/images (1).jpeg,cat,cat,1,0.07897771,0.07897771,0.05474583,1,0.9912482,0.9912482
+9,cats/michael-sum-LEpfefQf4rU-unsplash.webp,cat,cat,1,0.08231723,0.08231723,0.05923575,1,0.99553114,0.99553114
+10,dogs/Border-collier-holding-ball.webp,dog,dog,1,0.07077348,0.07077348,0.05004655,1,0.98948645,0.98948645
+11,dogs/What-are-we-doing-to-our-dogs_54e4552a-8cf3-4f0e-8653-bd86e9ebfdb5.jpg,dog,dog,1,0.07930514,0.07930514,0.05020793,1,0.99182549,0.99182549
+12,dogs/c529a263-8ffa-4521-a47e-babb146f1e6b.webp,dog,dog,1,0.06747782,0.06747782,0.05163298,1,0.98947076,0.98947076
+13,dogs/dog-puppy-on-garden-royalty-free-image-1586966191.avif,dog,dog,1,0.08256669,0.08256669,0.05163413,1,0.99298795,0.99298795
+14,dogs/dog.jpg,dog,dog,1,0.07411889,0.07411889,0.04968477,1,0.99039124,0.99039124
+15,dogs/download.jpeg,dog,dog,1,0.07165883,0.07165883,0.04996139,1,0.99067647,0.99067647
+16,dogs/german-shepherd-white-background.jpg,dog,dog,1,0.07744726,0.07744726,0.04925246,1,0.98905665,0.98905665
+17,dogs/happy-samoyed-dog-outdoors-in-summer-field-825x550.jpg,dog,dog,1,0.07629819,0.07629819,0.0588169,1,0.99665723,0.99665723
+18,dogs/images (1) copy 3.jpeg,dog,dog,1,0.07935587,0.07935587,0.05983513,1,0.99626414,0.99626414
+19,dogs/small+white+fluffy+dog+smiling+at+the+camera+in+close-up-min.jpg,dog,dog,1,0.0768485,0.0768485,0.04805143,1,0.9904965,0.9904965
+20,planes/360_F_1606497318_zH4hbpFJyWrUJ7iJ8SZl37sLcGT6B6TN.jpg,plane,plane,1,0.11238619,0.11238619,0.0753961,1,0.99944625,0.99944625
+21,planes/360_F_636076905_Sfc7Z4PtmohMK7m9mXOgE3SFvgGBoPQ2.jpg,plane,plane,1,0.10503944,0.10503944,0.06380864,1,0.99827082,0.99827082
+22,planes/679-6793329_airplane-10-transparent-background-plane-png-png-download.png,plane,plane,1,0.05670664,0.05670664,0.05727823,1,0.99666839,0.99666839
+23,planes/airplane-aircraft-clip-art-plane-png-transparent-images.jpg,plane,plane,1,0.05690684,0.05690684,0.06733252,1,0.99877532,0.99877532
+24,planes/airplane-png-7.jpg,plane,plane,1,0.10988317,0.10988317,0.07372799,1,0.99935037,0.99935037
+25,planes/images (1) copy 5.jpeg,plane,plane,1,0.10983849,0.10983849,0.07135463,1,0.99917945,0.99917945
+26,planes/images (2) copy.jpeg,plane,plane,1,0.11506152,0.11506152,0.06341349,1,0.99819861,0.99819861
+27,planes/images (3) copy.jpeg,plane,plane,1,0.11777791,0.11777791,0.08366117,1,0.99975862,0.99975862
+28,planes/images (4).jpeg,plane,plane,1,0.07733044,0.07733044,0.06723036,1,0.99872145,0.99872145
+29,planes/realistic-3d-plane-isolated-on-260nw-2296613831.webp,plane,plane,1,0.024078,0.024078,0.06783027,1,0.99886343,0.99886343
+30,clothes/62-623645_blue-sweatshirt-png-clip-art-clothes-transparent-background-clipart.png,clothes,clothes,1,0.03286253,0.03286253,0.06825454,1,0.99851038,0.99851038
+31,clothes/children-s-clothing-party-dress-infant-dress.jpg,clothes,clothes,1,0.0475894,0.0475894,0.06869028,1,0.99875112,0.99875112
+32,clothes/dress-see-through-clothing-dress.jpg,clothes,clothes,1,0.03748909,0.03748909,0.06748708,1,0.99847105,0.99847105
+33,clothes/grey-knit-sweater-mens-fashion-winter-apparel-casual-wear-soft-texture-comfortable-clothing_191095-84711.avif,clothes,clothes,1,0.05908233,0.05908233,0.07445305,1,0.9988915,0.9988915
+34,clothes/images (1) copy 4.jpeg,clothes,clothes,1,0.06856203,0.06856203,0.06160964,1,0.99643722,0.99643722
+35,clothes/images (2).jpeg,clothes,clothes,1,0.06371288,0.06371288,0.08768619,1,0.99954796,0.99954796
+36,clothes/images (3).jpeg,clothes,clothes,1,0.0485688,0.0485688,0.05068615,1,0.99139625,0.99139625
+37,clothes/pngtree-3d-colourful-short-shirt-on-transparent-background-png-image_13154795.png,clothes,clothes,1,0.0477349,0.0477349,0.07805862,1,0.99922287,0.99922287
+38,clothes/pngtree-sweater-clothing-on-transparent-background-png-image_14018450.png,clothes,clothes,1,0.05390035,0.05390035,0.0818739,1,0.99947014,0.99947014
+39,clothes/sweater-shirt-hoodie-isolated-png.webp,clothes,clothes,1,0.06910598,0.06910598,0.06394497,1,0.99741218,0.99741218
+40,cars/118050.jpg,car,car,1,0.08175489,0.08175489,0.07853631,1,0.99925018,0.99925018
+41,cars/20-new-cars-with-24-reg-4.avif,car,car,1,0.08104205,0.08104205,0.07338499,1,0.99893523,0.99893523
+42,cars/2021CARS_AUDIEtron.webp,car,car,1,0.06349639,0.06349639,0.08869938,1,0.99956712,0.99956712
+43,cars/2024-EQE350-4M-SEDAN-AVP-DR.webp,car,car,1,0.0936161,0.0936161,0.08011324,1,0.99951071,0.99951071
+44,cars/9540dd3020033401767c919ad5436e62.jpeg,car,car,1,0.06760922,0.06760922,0.06594689,1,0.99806328,0.99806328
+45,cars/best-evs-bmw-i7-car-long-termer.webp,car,car,1,0.05218524,0.05218524,0.05287011,1,0.98754079,0.98754079
+46,cars/ferrari-e-suv-2-copy-680287cac36b2.avif,car,car,1,0.06060569,0.06060569,0.0919675,1,0.99968377,0.99968377
+47,cars/front-left-side-47.avif,car,car,1,0.06428327,0.06428327,0.0683048,1,0.99833938,0.99833938
+48,cars/hero-bmw-blue.b05b6c811a4915f7813d.png,car,car,1,0.08217113,0.08217113,0.06162035,1,0.99746616,0.99746616
+49,cars/primesd-home-carousel.avif,car,car,1,0.08113086,0.08113086,0.07727054,1,0.99944113,0.99944113
