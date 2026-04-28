@@ -1,0 +1,65 @@
+% =====================================================================
+%  Main-body paragraph + figures for ranking system performance.
+%  Place after the Training section / before Verification Experiments.
+%
+%  Figures to upload to Overleaf  figures/  folder:
+%    exp_bayesian_defended/figure1_diff_quality_6lines.png
+%    exp_bayesian_defended/weight_trajectory.png
+%    exp_bayesian_defended/figure2_similar_quality_planes_6lines.png
+%    exp_bayesian_defended/figure4_quality_distribution.png
+% =====================================================================
+
+\section{Ranking Performance}
+\label{sec:ranking-perf}
+
+Figure~\ref{fig:rank-weight} (left) tracks the rank trajectories of six cat images spanning three quality tiers.
+The two highest-quality images (Image~3, $q{=}0.725$; Image~7, $q{=}0.569$) converge to ranks~1 and~2 within the first 100~rounds and remain there for the duration of the simulation.
+Mid-quality images settle into ranks~5--7, while the two lowest-quality images ($q{<}0.15$) drift below rank~8.
+This monotonic separation demonstrates that the ranking system successfully \emph{infers} latent image quality solely from noisy user interactions---without ever observing the ground-truth quality score directly.
+By round~500 the top-10 results for the ``cat'' query contain 10 out of 10 correctly categorised images, with the top-3 positions perfectly ordered by true quality.
+Figure~\ref{fig:rank-weight} (right) shows that the learned policy weights stabilise after roughly 200~rounds: cosine similarity retains the largest share (${\approx}0.26$), while like rate, watch time, and social proof grow to balanced contributions (${\approx}0.20$ each), and freshness decays to its floor.
+Additional figures---the quality distribution across categories and rank dynamics for similar-quality plane images---are provided in Appendix~\ref{app:extra-figs}.
+
+\begin{figure}[htbp]
+  \centering
+  \begin{minipage}[t]{0.52\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{figures/figure1_diff_quality_6lines.png}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.46\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{figures/weight_trajectory.png}
+  \end{minipage}
+  \caption{\textbf{Left:} Rank trajectories of six cat images at three quality tiers (high/mid/low).
+           Higher-quality images converge to lower (better) ranks.
+           \textbf{Right:} Policy weight trajectory over 1\,000~rounds.
+           Weights stabilise after ${\sim}200$ rounds; cosine similarity dominates while engagement signals share the remaining budget.}
+  \label{fig:rank-weight}
+\end{figure}
+
+% =====================================================================
+%  Appendix figures (place in your appendix section)
+% =====================================================================
+
+% \appendix  % uncomment if not already in appendix mode
+% \section{Additional Figures}
+% \label{app:extra-figs}
+%
+% \begin{figure}[htbp]
+%   \centering
+%   \includegraphics[width=0.75\linewidth]{figures/figure4_quality_distribution.png}
+%   \caption{Quality score distribution per category.  Each dot is one image;
+%            horizontal lines mark the median.  Quality values are drawn
+%            i.i.d.\ from $\mathrm{Beta}(2,5)$ and are hidden from the ranker.}
+%   \label{fig:quality-dist}
+% \end{figure}
+%
+% \begin{figure}[htbp]
+%   \centering
+%   \includegraphics[width=0.85\linewidth]{figures/figure2_similar_quality_planes_6lines.png}
+%   \caption{Rank dynamics for six plane images with the tightest quality spread
+%            ($q \in [0.075, 0.347]$).  Despite small quality differences, the
+%            system gradually separates them, with higher-quality images
+%            trending toward better ranks over 1\,000~rounds.}
+%   \label{fig:planes-similar}
+% \end{figure}

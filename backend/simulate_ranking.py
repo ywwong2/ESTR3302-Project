@@ -5,7 +5,8 @@ import csv
 import json
 import math
 import random
-from dataclasses import dataclass
+from collections import deque
+from dataclasses import dataclass, field
 from pathlib import Path
 
 
@@ -84,6 +85,8 @@ class ImageState:
     social_proof: float = 0.0
     arrival_time: int = 0  # Round when image was injected (0 for initial images)
     last_shown_round: int = 0  # Last round when image was displayed to users
+    # Frequency-update window storage
+    _freq_window: deque = field(default_factory=deque, repr=False)
 
     def update_stats(
         self,
@@ -108,6 +111,36 @@ class ImageState:
         self.awt = (1.0 - rho) * self.awt + rho * mean_watch_t
 
         numerator = math.log1p(self.tilde_v + omega_l * self.tilde_l)
+        self.social_proof = min(1.0, numerator / m_social) if m_social > 0 else 0.0
+
+    def update_stats_frequency(
+        self,
+        e_t: float,
+        v_t: float,
+        l_t: float,
+        watch_sum_t: float,
+        watch_cnt_t: float,
+        window_size: int,
+        omega_l: float,
+        m_social: float,
+    ) -> None:
+        """Sliding-window frequency update — no Bayesian prior, no EWMA."""
+        self._freq_window.append((e_t, v_t, l_t, watch_sum_t, watch_cnt_t))
+        while len(self._freq_window) > window_size:
+            self._freq_window.popleft()
+        tot_e = sum(r[0] for r in self._freq_window)
+        tot_v = sum(r[1] for r in self._freq_window)
+        tot_l = sum(r[2] for r in self._freq_window)
+        tot_ws = sum(r[3] for r in self._freq_window)
+        tot_wc = sum(r[4] for r in self._freq_window)
+        self.ctr = tot_v / tot_e if tot_e > 0 else 0.0
+        self.lr = tot_l / tot_v if tot_v > 0 else 0.0
+        self.awt = tot_ws / tot_wc if tot_wc > 0 else 0.0
+        # Raw social proof (same formula but on raw window sums)
+        self.tilde_v = tot_v
+        self.tilde_l = tot_l
+        self.tilde_e = tot_e
+        numerator = math.log1p(tot_v + omega_l * tot_l)
         self.social_proof = min(1.0, numerator / m_social) if m_social > 0 else 0.0
 
 
@@ -296,6 +329,21 @@ def get_parser() -> argparse.ArgumentParser:
     parser.add_argument("--freshness-decay-scale", type=float, default=5.0, help="Scale parameter for freshness decay: f = 2^(-(t - t_arrival) / scale).")
     parser.add_argument("--recovery-boost-interval", type=int, default=50, help="Every N rounds, apply recovery boost to images not shown recently.")
     parser.add_argument("--recovery-boost-strength", type=float, default=0.5, help="Temporary freshness boost for images not shown in last N rounds.")
+    # ── Experiment flags ──────────────────────────────────────────
+    parser.add_argument("--frequency-update", action="store_true", help="Use sliding-window frequency counts instead of EWMA+Bayesian smoothing.")
+    parser.add_argument("--frequency-window", type=int, default=50, help="Window size (rounds) for frequency update.")
+    parser.add_argument("--drift-round", type=int, default=0, help="Round at which to apply oracle parameter drift (0=disabled).")
+    parser.add_argument("--drift-alpha-q", type=float, default=0.05)
+    parser.add_argument("--drift-gamma-q", type=float, default=1.0)
+    parser.add_argument("--drift-delta-q", type=float, default=1.0)
+    parser.add_argument("--drift-alpha", nargs=5, type=float, default=[-1.40, 1.40, 3.40, 0.40, 0.80], help="Drifted alpha vector.")
+    parser.add_argument("--synthetic-image-round", type=int, default=0, help="Round to inject a single synthetic image (0=disabled).")
+    parser.add_argument("--synthetic-image-quality", type=float, default=0.01)
+    parser.add_argument("--synthetic-start-round", type=int, default=0, help="Round to begin injecting fake interactions.")
+    parser.add_argument("--synthetic-views-per-round", type=float, default=0, help="Fake views injected per round for the synthetic image.")
+    parser.add_argument("--synthetic-like-ratio", type=float, default=0.8, help="Fraction of fake views that become fake likes.")
+    parser.add_argument("--velocity-clamp", type=float, default=0.0, help="If >0, clamp per-image per-round views/likes at this multiple of the population mean (anomaly defense).")
+    parser.add_argument("--trust-ramp-period", type=int, default=0, help="If >0, attenuate engagement signals for images younger than this many rounds (trust = min(1, age/M)).")
     return parser
 
 
@@ -380,9 +428,42 @@ def run_simulation(args: argparse.Namespace) -> dict[str, Path]:
         writer = csv.DictWriter(f, fieldnames=headers)
         writer.writeheader()
 
+        # Track synthetic image id for experiment 3
+        synthetic_image_id: int | None = None
+
         for t in range(1, args.rounds + 1):
+            # ── Oracle drift (Experiment 2) ────────────────────────
+            if args.drift_round > 0 and t == args.drift_round:
+                alpha = list(args.drift_alpha)
+                alpha_q = args.drift_alpha_q
+                gamma_q = args.drift_gamma_q
+                delta_q = args.drift_delta_q
+                print(f"Round {t}: Oracle drift applied — alpha_q={alpha_q}, gamma_q={gamma_q}, delta_q={delta_q}, alpha={alpha}")
+
+            # ── Synthetic image injection (Experiment 3) ───────────
+            if args.synthetic_image_round > 0 and t == args.synthetic_image_round:
+                inject_cat_idx = 0  # cat
+                cat_cosines = [
+                    float((img.cosine_by_query or {}).get("cat", 0.0))
+                    for img in images if img.category == inject_cat_idx
+                ]
+                avg_cos = sum(cat_cosines) / len(cat_cosines) if cat_cosines else 0.1
+                synthetic_image_id = len(images)
+                syn_img = ImageState(
+                    image_id=synthetic_image_id,
+                    category=inject_cat_idx,
+                    embedding=[0.0] * args.embedding_dim,
+                    quality=args.synthetic_image_quality,
+                    freshness=1.0,
+                    arrival_time=t,
+                    cosine_by_query={"cat": avg_cos} if use_dataset_cache else None,
+                    ctr=0.1, lr=0.05,
+                )
+                images.append(syn_img)
+                print(f"Round {t}: Synthetic image injected (id={synthetic_image_id}, q={args.synthetic_image_quality}, cos={avg_cos:.4f})")
+
             # Update freshness with decay formula: f = 2^(-(t - t_arrival) / scale)
-            if args.inject_images:
+            if args.inject_images or args.synthetic_image_round > 0:
                 for img in images:
                     age = t - img.arrival_time
                     img.freshness = 2.0 ** (-age / args.freshness_decay_scale)
@@ -631,25 +712,83 @@ def run_simulation(args: argparse.Namespace) -> dict[str, Path]:
             if args.min_fresh_weight > 0:
                 w[1] = max(w[1], args.min_fresh_weight)  # Force w_fresh >= min_fresh_weight
 
-            # Apply EWMA/Bayesian smoothing updates.
+            # ── Synthetic interaction injection (Experiment 3) ──────
+            if (synthetic_image_id is not None
+                    and args.synthetic_start_round > 0
+                    and t >= args.synthetic_start_round
+                    and args.synthetic_views_per_round > 0):
+                fake_v = args.synthetic_views_per_round
+                fake_l = fake_v * args.synthetic_like_ratio
+                agg_syn = image_aggr[synthetic_image_id]
+                agg_syn["e"] += fake_v
+                agg_syn["v"] += fake_v
+                agg_syn["l"] += fake_l
+                agg_syn["watch_sum"] += fake_v * 0.7  # fake high watch time
+                agg_syn["watch_cnt"] += fake_v
+
+            # ── Velocity clamp defense ──────────────────────────────
+            if args.velocity_clamp > 0:
+                n_img = len(images)
+                mean_v = sum(image_aggr[img.image_id]["v"] for img in images) / max(n_img, 1)
+                mean_l = sum(image_aggr[img.image_id]["l"] for img in images) / max(n_img, 1)
+                mean_ws = sum(image_aggr[img.image_id]["watch_sum"] for img in images) / max(n_img, 1)
+                cap_v = args.velocity_clamp * max(mean_v, 0.5)
+                cap_l = args.velocity_clamp * max(mean_l, 0.1)
+                cap_ws = args.velocity_clamp * max(mean_ws, 0.1)
+                for img in images:
+                    a = image_aggr[img.image_id]
+                    if a["v"] > cap_v:
+                        ratio = cap_v / a["v"]
+                        a["v"] = cap_v
+                        a["l"] = min(a["l"], a["l"] * ratio)
+                        a["watch_sum"] = min(a["watch_sum"], a["watch_sum"] * ratio)
+                        a["watch_cnt"] = min(a["watch_cnt"], a["watch_cnt"] * ratio)
+                        a["e"] = min(a["e"], cap_v)
+
+            # ── Trust ramp: attenuate engagement for young images ───
+            if args.trust_ramp_period > 0:
+                for img in images:
+                    age = max(t - img.arrival_time, 1)
+                    if age < args.trust_ramp_period:
+                        trust = age / args.trust_ramp_period
+                        a = image_aggr[img.image_id]
+                        a["e"] *= trust
+                        a["v"] *= trust
+                        a["l"] *= trust
+                        a["watch_sum"] *= trust
+                        a["watch_cnt"] *= trust
+
+            # Apply engagement updates.
             for img in images:
                 agg = image_aggr[img.image_id]
-                mean_watch = (
-                    agg["watch_sum"] / agg["watch_cnt"] if agg["watch_cnt"] > 0 else 0.0
-                )
-                img.update_stats(
-                    e_t=agg["e"],
-                    v_t=agg["v"],
-                    l_t=agg["l"],
-                    mean_watch_t=mean_watch,
-                    rho=args.rho,
-                    c_ctr=args.c_ctr,
-                    m_ctr=args.m_ctr,
-                    c_lr=args.c_lr,
-                    m_lr=args.m_lr,
-                    omega_l=args.omega_l,
-                    m_social=args.m_social,
-                )
+                if getattr(args, "frequency_update", False):
+                    img.update_stats_frequency(
+                        e_t=agg["e"],
+                        v_t=agg["v"],
+                        l_t=agg["l"],
+                        watch_sum_t=agg["watch_sum"],
+                        watch_cnt_t=agg["watch_cnt"],
+                        window_size=args.frequency_window,
+                        omega_l=args.omega_l,
+                        m_social=args.m_social,
+                    )
+                else:
+                    mean_watch = (
+                        agg["watch_sum"] / agg["watch_cnt"] if agg["watch_cnt"] > 0 else 0.0
+                    )
+                    img.update_stats(
+                        e_t=agg["e"],
+                        v_t=agg["v"],
+                        l_t=agg["l"],
+                        mean_watch_t=mean_watch,
+                        rho=args.rho,
+                        c_ctr=args.c_ctr,
+                        m_ctr=args.m_ctr,
+                        c_lr=args.c_lr,
+                        m_lr=args.m_lr,
+                        omega_l=args.omega_l,
+                        m_social=args.m_social,
+                    )
 
             denom = max(len(batch_users) * args.top_k, 1)
             avg_reward = total_reward / max(len(batch_users), 1)
