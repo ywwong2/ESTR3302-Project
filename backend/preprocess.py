@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
@@ -35,13 +34,5 @@ def preprocess_image(file_path: Path, out_dir: Path) -> dict[str, Any]:
 
 def run_preprocessing(media_type: str, file_path: Path, out_dir: Path) -> dict[str, Any]:
     if media_type == "image":
-        result = preprocess_image(file_path, out_dir)
-    else:
-        raise ValueError(f"Unsupported media type: {media_type}")
-
-    # Save preprocessing manifest for debugging
-    manifest_path = out_dir / f"{file_path.stem}_preprocess.json"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    manifest_path.write_text(json.dumps(result, indent=2), encoding="utf-8")
-    result["manifest_path"] = str(manifest_path)
-    return result
+        return preprocess_image(file_path, out_dir)
+    raise ValueError(f"Unsupported media type: {media_type}")

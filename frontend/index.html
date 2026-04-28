@@ -3,51 +3,121 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Course Image Search</title>
+    <title>Image Ranking Simulation</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <header class="topbar">
-      <h1>Image Search Engine</h1>
-      <p>ESTR3302 Project</p>
-    </header>
 
-    <main class="container">
-      <section class="panel">
-        <h2>Search</h2>
-        <div class="search-row">
-          <input id="searchInput" type="text" placeholder="Semantic search (embeds your query)…" />
-          <button id="searchBtn">Search</button>
+    <!-- Init overlay (pool selection) -->
+    <div id="initOverlay" class="overlay">
+      <div class="overlay-card">
+        <h1>Image Ranking Simulation</h1>
+        <p>Choose the starting image pool for this session:</p>
+        <div class="init-btns">
+          <button class="btn-primary" onclick="initPool('dataset')">
+            📦 Load 50-Image Dataset
+            <small>Starts with pre-computed SigLIP cosines</small>
+          </button>
+          <button class="btn-secondary" onclick="initPool('empty')">
+            🆕 Start Empty
+            <small>Upload your own images</small>
+          </button>
         </div>
-      </section>
+        <p class="hint">You can also <a href="#" onclick="skipInit()">skip and use existing state</a></p>
+      </div>
+    </div>
 
-      <section class="panel">
-        <h2>Upload Content</h2>
-        <div class="upload-row">
-          <input id="titleInput" type="text" placeholder="Optional title" />
-          <input id="fileInput" type="file" accept="image/*" />
-          <button id="uploadBtn">Upload Image</button>
+    <!-- Main app -->
+    <div id="app" class="app hidden">
+
+      <header class="topbar">
+        <div class="topbar-left">
+          <h1>Image Ranking Simulation</h1>
+          <span id="roundBadge" class="round-badge">Round 0</span>
         </div>
-        <p class="hint">Supported: image files only.</p>
-      </section>
-
-      <section class="panel">
-        <h2>Results</h2>
-        <div id="results" class="results-grid"></div>
-      </section>
-
-      <section class="panel debug-panel">
-        <div class="debug-header">
-          <h2>🔍 Debug Log</h2>
-          <button id="clearLogBtn" class="clear-log-btn">Clear</button>
+        <div class="topbar-right">
+          <span id="rewardBadge" class="reward-badge"></span>
         </div>
-        <div id="debugLog" class="debug-log"></div>
-      </section>
-    </main>
+      </header>
 
+      <div class="layout">
+
+        <!-- LEFT: Simulation Control -->
+        <aside class="sidebar">
+
+          <section class="panel sim-panel">
+            <h2>Simulation Control</h2>
+
+            <div class="sim-stat-row">
+              <span>Round</span><strong id="simRound">0</strong>
+            </div>
+            <div class="sim-stat-row">
+              <span>Last Reward</span><strong id="simReward">—</strong>
+            </div>
+
+            <div class="sim-controls">
+              <button id="toggleBtn" class="btn-toggle btn-start" onclick="toggleSim()">▶ Start</button>
+              <button class="btn-sm" onclick="stepSim()">+1 Step</button>
+              <button class="btn-sm btn-danger" onclick="resetSim()">Reset</button>
+            </div>
+
+            <label class="ctrl-label">
+              Tick interval (seconds)
+              <div class="interval-row">
+                <input id="intervalSlider" type="range" min="1" max="30" value="5" oninput="updateInterval(this.value)" />
+                <span id="intervalVal">5s</span>
+              </div>
+            </label>
+
+            <div class="weight-bars" id="weightBars"></div>
+          </section>
+
+          <section class="panel preset-panel">
+            <h2>Experiment Preset</h2>
+            <p class="hint">Load the pre-run 1000-round experiment results.</p>
+            <button class="btn-secondary" onclick="openPreset()">📊 View Figures</button>
+            <button class="btn-secondary" onclick="loadPresetState()">⬇ Load Round-1000 State</button>
+          </section>
+
+          <section class="panel debug-panel">
+            <div class="debug-header">
+              <h3>Debug Log</h3>
+              <button class="btn-xs" onclick="debugLogEl.innerHTML=''">Clear</button>
+            </div>
+            <div id="debugLog" class="debug-log"></div>
+          </section>
+
+        </aside>
+
+        <!-- RIGHT: Search / Upload / Grid -->
+        <main class="content">
+
+          <section class="panel search-panel">
+            <div class="search-upload-row">
+              <input id="searchInput" type="text" placeholder="Search images (cat, dog, plane…)" />
+              <button class="btn-primary" onclick="doSearch()">Search</button>
+              <button class="btn-secondary" onclick="doSearch('')">Show All</button>
+            </div>
+            <div class="upload-row">
+              <input id="titleInput" type="text" placeholder="Title (optional)" />
+              <input id="fileInput" type="file" accept="image/*" />
+              <button class="btn-primary" onclick="doUpload()">Upload</button>
+            </div>
+          </section>
+
+          <section class="panel">
+            <h2>Images <span id="imageCount" class="count-badge"></span></h2>
+            <div id="imageGrid" class="image-grid"></div>
+          </section>
+
+        </main>
+      </div>
+    </div>
+
+    <!-- Modal -->
     <div id="modal" class="modal hidden">
       <div class="modal-content">
-        <button id="closeModal" class="close-btn">×</button>
+        <button class="close-btn" onclick="closeModal()">×</button>
         <div id="modalBody"></div>
       </div>
     </div>
