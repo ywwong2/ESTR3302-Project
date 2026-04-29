@@ -1,0 +1,132 @@
+{
+  "round": 11,
+  "running": false,
+  "interval": 3.0,
+  "pool_mode": "dataset",
+  "weights": [
+    0.24926228126339664,
+    0.1508380758426958,
+    0.14973562684355923,
+    0.1498556560627016,
+    0.15136439069654528,
+    0.14894396929110149
+  ],
+  "last_reward": 7.9188,
+  "custom_params": {
+    "alpha_q": 0.35,
+    "gamma_q": 8.1,
+    "delta_q": 4.5,
+    "batch_size": 30,
+    "user_sigma": 0.0
+  },
+  "pending_feedback": {
+    "ds_19": {
+      "view": 0,
+      "like": 0,
+      "watch": 0.0,
+      "examine": 1
+    },
+    "ds_12": {
+      "view": 0,
+      "like": 0,
+      "watch": 0.0,
+      "examine": 1
+    },
+    "ds_11": {
+      "view": 0,
+      "like": 0,
+      "watch": 0.0,
+      "examine": 1
+    },
+    "ds_17": {
+      "view": 0,
+      "like": 0,
+      "watch": 0.0,
+      "examine": 1
+    },
+    "ds_14": {
+      "view": 0,
+      "like": 0,
+      "watch": 0.0,
+      "examine": 1
+    },
+    "ds_4": {
+      "view": 0,
+      "like": 0,
+      "watch": 0.0,
+      "examine": 8
+    },
+    "ds_15": {
+      "view": 0,
+      "like": 0,
+      "watch": 0.0,
+      "examine": 1
+    },
+    "ds_13": {
+      "view": 0,
+      "like": 0,
+      "watch": 0.0,
+      "examine": 1
+    },
+    "ds_7": {
+      "view": 0,
+      "like": 0,
+      "watch": 0.0,
+      "examine": 8
+    },
+    "ds_16": {
+      "view": 0,
+      "like": 0,
+      "watch": 0.0,
+      "examine": 1
+    },
+    "ds_0": {
+      "view": 0,
+      "like": 0,
+      "watch": 0.0,
+      "examine": 7
+    },
+    "ds_1": {
+      "view": 0,
+      "like": 0,
+      "watch": 0.0,
+      "examine": 7
+    },
+    "ds_5": {
+      "view": 0,
+      "like": 0,
+      "watch": 0.0,
+      "examine": 7
+    },
+    "ds_3": {
+      "view": 0,
+      "like": 0,
+      "watch": 0.0,
+      "examine": 7
+    },
+    "ds_2": {
+      "view": 0,
+      "like": 0,
+      "watch": 0.0,
+      "examine": 7
+    },
+    "ds_6": {
+      "view": 0,
+      "like": 0,
+      "watch": 0.0,
+      "examine": 7
+    },
+    "ds_8": {
+      "view": 0,
+      "like": 0,
+      "watch": 0.0,
+      "examine": 7
+    },
+    "ds_9": {
+      "view": 0,
+      "like": 0,
+      "watch": 0.0,
+      "examine": 7
+    }
+  }
+}

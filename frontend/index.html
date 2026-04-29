@@ -8,27 +8,8 @@
   </head>
   <body>
 
-    <!-- Init overlay (pool selection) -->
-    <div id="initOverlay" class="overlay">
-      <div class="overlay-card">
-        <h1>Image Ranking Simulation</h1>
-        <p>Choose the starting image pool for this session:</p>
-        <div class="init-btns">
-          <button class="btn-primary" onclick="initPool('dataset')">
-            📦 Load 50-Image Dataset
-            <small>Starts with pre-computed SigLIP cosines</small>
-          </button>
-          <button class="btn-secondary" onclick="initPool('empty')">
-            🆕 Start Empty
-            <small>Upload your own images</small>
-          </button>
-        </div>
-        <p class="hint">You can also <a href="#" onclick="skipInit()">skip and use existing state</a></p>
-      </div>
-    </div>
-
-    <!-- Main app -->
-    <div id="app" class="app hidden">
+    <!-- Main app (shown immediately, no overlay) -->
+    <div id="app" class="app">
 
       <header class="topbar">
         <div class="topbar-left">
@@ -42,43 +23,84 @@
 
       <div class="layout">
 
-        <!-- LEFT: Simulation Control -->
+        <!-- LEFT: Sidebar -->
         <aside class="sidebar">
 
-          <section class="panel sim-panel">
-            <h2>Simulation Control</h2>
+          <!-- Data Pool -->
+          <section class="panel pool-panel">
+            <h2>Data Pool</h2>
+            <button class="btn-pool btn-primary" onclick="initPool('dataset')">📦 Load 50 Images</button>
+            <button class="btn-pool btn-secondary" onclick="loadWithState()">⬇ Load + Trained State</button>
+            <button class="btn-pool btn-danger-light" onclick="initPool('empty')">🗑 Clear All</button>
+          </section>
 
+          <!-- Simulation Control -->
+          <section class="panel sim-panel">
+            <h2>Simulation</h2>
             <div class="sim-stat-row">
               <span>Round</span><strong id="simRound">0</strong>
             </div>
             <div class="sim-stat-row">
-              <span>Last Reward</span><strong id="simReward">—</strong>
+              <span>Reward</span><strong id="simReward">—</strong>
             </div>
-
             <div class="sim-controls">
-              <button id="toggleBtn" class="btn-toggle btn-start" onclick="toggleSim()">▶ Start</button>
-              <button class="btn-sm" onclick="stepSim()">+1 Step</button>
-              <button class="btn-sm btn-danger" onclick="resetSim()">Reset</button>
+              <button id="runBtn" class="btn-toggle btn-start" onclick="toggleSim()">▶ Run</button>
+              <button class="btn-sm btn-danger" onclick="resetSim()">↺ Reset</button>
             </div>
-
+            <div id="countdown" class="countdown"></div>
             <label class="ctrl-label">
-              Tick interval (seconds)
+              Tick interval
               <div class="interval-row">
                 <input id="intervalSlider" type="range" min="1" max="30" value="5" oninput="updateInterval(this.value)" />
                 <span id="intervalVal">5s</span>
               </div>
             </label>
-
             <div class="weight-bars" id="weightBars"></div>
           </section>
 
-          <section class="panel preset-panel">
-            <h2>Experiment Preset</h2>
-            <p class="hint">Load the pre-run 1000-round experiment results.</p>
-            <button class="btn-secondary" onclick="openPreset()">📊 View Figures</button>
-            <button class="btn-secondary" onclick="loadPresetState()">⬇ Load Round-1000 State</button>
+          <!-- User Behaviour -->
+          <section class="panel behaviour-panel">
+            <h2>User Behaviour</h2>
+            <div class="bhv-row">
+              <label>View × Quality &nbsp;<span id="alphaqVal">0.30</span></label>
+              <input id="alphaqSlider" type="range" min="0" max="2" step="0.05" value="0.30"
+                     oninput="document.getElementById('alphaqVal').textContent=parseFloat(this.value).toFixed(2);setParams();" />
+              <p class="bhv-hint">How much image quality boosts the chance a user <em>clicks</em> to view it.</p>
+            </div>
+            <div class="bhv-row">
+              <label>Watch × Quality &nbsp;<span id="gammaqVal">4.5</span></label>
+              <input id="gammaqSlider" type="range" min="0" max="10" step="0.1" value="4.50"
+                     oninput="document.getElementById('gammaqVal').textContent=parseFloat(this.value).toFixed(1);setParams();" />
+              <p class="bhv-hint">How much quality drives <em>dwell time</em> — high quality → users linger longer.</p>
+            </div>
+            <div class="bhv-row">
+              <label>Like × Quality &nbsp;<span id="deltaqVal">4.0</span></label>
+              <input id="deltaqSlider" type="range" min="0" max="10" step="0.1" value="4.00"
+                     oninput="document.getElementById('deltaqVal').textContent=parseFloat(this.value).toFixed(1);setParams();" />
+              <p class="bhv-hint">How much quality raises the chance a user <em>likes</em> after watching.</p>
+            </div>
+            <div class="bhv-row">
+              <label>Users / round &nbsp;<span id="batchVal">30</span></label>
+              <input id="batchSlider" type="range" min="1" max="200" step="1" value="30"
+                     oninput="document.getElementById('batchVal').textContent=this.value;setParams();" />
+              <p class="bhv-hint">Simulated users generated each tick — more users = faster learning signal.</p>
+            </div>
+            <div class="bhv-row">
+              <label>User σ &nbsp;<span id="sigmaVal">0.00</span></label>
+              <input id="sigmaSlider" type="range" min="0" max="2" step="0.05" value="0"
+                     oninput="document.getElementById('sigmaVal').textContent=parseFloat(this.value).toFixed(2);setParams();" />
+              <p class="bhv-hint">Individual-difference noise added to each user's view/like logit (0 = identical users).</p>
+            </div>
           </section>
 
+          <!-- Preset -->
+          <section class="panel preset-panel">
+            <h2>Experiment Preset</h2>
+            <p class="hint">Pre-run 1000-round experiment results.</p>
+            <button class="btn-secondary" onclick="openPreset()">📊 View Figures</button>
+          </section>
+
+          <!-- Debug log -->
           <section class="panel debug-panel">
             <div class="debug-header">
               <h3>Debug Log</h3>
@@ -93,13 +115,22 @@
         <main class="content">
 
           <section class="panel search-panel">
-            <div class="search-upload-row">
-              <input id="searchInput" type="text" placeholder="Search images (cat, dog, plane…)" />
+            <div class="search-row">
+              <input id="searchInput" type="text" placeholder="Search anything… e.g. cat, vehicle, fluffy animal" />
               <button class="btn-primary" onclick="doSearch()">Search</button>
-              <button class="btn-secondary" onclick="doSearch('')">Show All</button>
+              <button class="btn-secondary" onclick="doSearch('')">All</button>
+            </div>
+            <div class="cat-chips">
+              <span class="chip-label">Experiment categories:</span>
+              <button class="chip" data-q="cat"     onclick="quickSearch('cat')">🐱 cat</button>
+              <button class="chip" data-q="dog"     onclick="quickSearch('dog')">🐶 dog</button>
+              <button class="chip" data-q="plane"   onclick="quickSearch('plane')">✈️ plane</button>
+              <button class="chip" data-q="clothes" onclick="quickSearch('clothes')">👗 clothes</button>
+              <button class="chip" data-q="car"     onclick="quickSearch('car')">🚗 car</button>
             </div>
             <div class="upload-row">
               <input id="titleInput" type="text" placeholder="Title (optional)" />
+              <input id="qualityInput" type="number" min="0" max="1" step="0.05" placeholder="Quality 0–1 (optional)" />
               <input id="fileInput" type="file" accept="image/*" />
               <button class="btn-primary" onclick="doUpload()">Upload</button>
             </div>

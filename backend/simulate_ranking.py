@@ -85,6 +85,8 @@ class ImageState:
     social_proof: float = 0.0
     arrival_time: int = 0  # Round when image was injected (0 for initial images)
     last_shown_round: int = 0  # Last round when image was displayed to users
+    cum_views: float = 0.0   # Cumulative post-defense views across all rounds
+    cum_likes: float = 0.0   # Cumulative post-defense likes across all rounds
     # Frequency-update window storage
     _freq_window: deque = field(default_factory=deque, repr=False)
 
@@ -394,7 +396,7 @@ def run_simulation(args: argparse.Namespace) -> dict[str, Path]:
     if item_diag_path:
         item_diag_f = item_diag_path.open("w", newline="", encoding="utf-8")
         item_diag_writer = csv.writer(item_diag_f)
-        item_diag_writer.writerow(["round", "image_id", "category", "quality", "freshness", "ctr", "lr", "awt", "social_proof", "cos_ui_own", "own_query_score"])
+        item_diag_writer.writerow(["round", "image_id", "category", "quality", "freshness", "ctr", "lr", "awt", "social_proof", "cos_ui_own", "own_query_score", "cum_views", "cum_likes"])
 
     headers = [
         "round",
@@ -758,6 +760,12 @@ def run_simulation(args: argparse.Namespace) -> dict[str, Path]:
                         a["watch_sum"] *= trust
                         a["watch_cnt"] *= trust
 
+            # Accumulate cumulative counts (post-clamp, post-trust-ramp)
+            for img in images:
+                agg = image_aggr[img.image_id]
+                img.cum_views += agg["v"]
+                img.cum_likes += agg["l"]
+
             # Apply engagement updates.
             for img in images:
                 agg = image_aggr[img.image_id]
@@ -841,7 +849,7 @@ def run_simulation(args: argparse.Namespace) -> dict[str, Path]:
                     if not args.drop_social:
                         x.append(img.social_proof)
                     own_score = dot(w, x)
-                    item_diag_writer.writerow([t, img.image_id, img.category, f"{img.quality:.6f}", f"{img.freshness:.6f}", f"{img.ctr:.6f}", f"{img.lr:.6f}", f"{img.awt:.6f}", f"{img.social_proof:.6f}", f"{cos_ui:.6f}", f"{own_score:.6f}"])
+                    item_diag_writer.writerow([t, img.image_id, img.category, f"{img.quality:.6f}", f"{img.freshness:.6f}", f"{img.ctr:.6f}", f"{img.lr:.6f}", f"{img.awt:.6f}", f"{img.social_proof:.6f}", f"{cos_ui:.6f}", f"{own_score:.6f}", f"{img.cum_views:.1f}", f"{img.cum_likes:.1f}"])
 
             # Write query rankings
             if query_rank_writer and (t % 10 == 0 or t == 1 or t == args.rounds):

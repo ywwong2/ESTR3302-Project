@@ -226,6 +226,10 @@ def _run_one_round(
         a = _softmax(logits)
         rewards = [0.0] * n
 
+        user_sigma = p.get("user_sigma", 0.0)
+        xi_view = rng.gauss(0.0, user_sigma) if user_sigma > 0 else 0.0
+        xi_like = rng.gauss(0.0, user_sigma) if user_sigma > 0 else 0.0
+
         for rank, idx in enumerate(displayed):
             img = items[idx]
             if is_real and real_user_feedback:
@@ -241,7 +245,7 @@ def _run_one_round(
                 examined = 1.0 if rng.random() < eta_r else 0.0
                 if examined == 0.0:
                     continue
-                view = 1.0 if rng.random() < _sigmoid(_dot(p["alpha"], h) + p["alpha_q"] * q_val) else 0.0
+                view = 1.0 if rng.random() < _sigmoid(_dot(p["alpha"], h) + p["alpha_q"] * q_val + xi_view) else 0.0
                 watch = 0.0
                 like = 0.0
                 if view:
@@ -249,7 +253,7 @@ def _run_one_round(
                     a_b = max(p["kappa"] * mu, 1e-6)
                     b_b = max(p["kappa"] * (1 - mu), 1e-6)
                     watch = rng.betavariate(a_b, b_b)
-                    like = 1.0 if rng.random() < _sigmoid(_dot(p["delta"], h) + p["delta_t"] * watch + p["delta_q"] * q_val) else 0.0
+                    like = 1.0 if rng.random() < _sigmoid(_dot(p["delta"], h) + p["delta_t"] * watch + p["delta_q"] * q_val + xi_like) else 0.0
 
             r_ui = p["lambda_v"] * view + p["lambda_t"] * watch + p["lambda_l"] * like
             rewards[idx] = r_ui
@@ -287,6 +291,8 @@ def _run_one_round(
         img["lr"] = (img["tilde_l"] + p["c_lr"] * p["m_lr"]) / (img["tilde_v"] + p["c_lr"])
         mw = agg["ws"] / agg["wc"] if agg["wc"] > 0 else 0.0
         img["awt"] = (1 - rho) * img.get("awt", 0.0) + rho * mw
+        img["total_views"] = img.get("total_views", 0) + round(tv)
+        img["total_likes"] = img.get("total_likes", 0) + round(tl)
 
     return items, w, total_reward / max(bs, 1)
 
@@ -316,6 +322,9 @@ def _sim_loop() -> None:
             w = state.get("weights", _DEFAULT_SIM_STATE["weights"])
             p = dict(_SIM_PARAMS)
             p["t"] = state.get("round", 0) + 1
+            custom = state.get("custom_params", {})
+            if custom:
+                p.update(custom)
 
             pending_fb = state.pop("pending_feedback", {})
             updated_items, w, avg_r = _run_one_round(items, w, rng, p, real_user_feedback=pending_fb if pending_fb else None)
@@ -340,8 +349,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+_DATASET_IMAGES_DIR = _BASE.parent / "dataset"
 _GALLERY_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=str(_GALLERY_DIR)), name="uploads")
+app.mount("/dataset", StaticFiles(directory=str(_DATASET_IMAGES_DIR)), name="dataset")
 
 
 @app.on_event("startup")
@@ -371,7 +382,10 @@ def list_images(request: Request, q: str = "") -> dict:
     q = (q or "").strip().lower()
 
     for item in items:
-        item["url"] = str(request.url_for("uploads", path=item["filename"]))
+        if item.get("is_dataset") and item.get("relative_path"):
+            item["url"] = str(request.base_url) + "dataset/" + item["relative_path"]
+        else:
+            item["url"] = str(request.url_for("uploads", path=item["filename"])) if item.get("filename") else ""
 
     if not q:
         for i, item in enumerate(items):
@@ -381,27 +395,40 @@ def list_images(request: Request, q: str = "") -> dict:
     q_vec = embed_query_text(q, cache_path=_QUERY_CACHE_JSON)
     q_cat_idx = QUERY_LABELS.index(q) if q in QUERY_LABELS else -1
 
+    # Stage 1: score all by cosine, keep top-K
     for item in items:
         cos_ui = float(item.get("cosines", {}).get(q, 0.0))
         if cos_ui == 0.0 and item.get("vector"):
             cos_ui = cosine_similarity(item["vector"], q_vec)
+        item["_cos"] = cos_ui
+
+    two_stage_k = _SIM_PARAMS["two_stage_top_k"]
+    items_by_cos = sorted(items, key=lambda x: x["_cos"], reverse=True)
+    stage1 = items_by_cos[:two_stage_k]
+    rest   = items_by_cos[two_stage_k:]
+
+    # Stage 2: re-rank stage1 by quality score (with match bonus)
+    for item in stage1:
+        cos_ui = item["_cos"]
         match = 1.0 if item.get("category_idx", -1) == q_cat_idx else 0.0
         qs = (
-            _SIM_PARAMS["qw_cos"] * cos_ui +
+            _SIM_PARAMS["qw_cos"]   * cos_ui +
             _SIM_PARAMS["qw_match"] * match +
             _SIM_PARAMS["qw_fresh"] * item.get("freshness", 0.5) +
-            _SIM_PARAMS["qw_ctr"] * item.get("ctr", 0.1) +
-            _SIM_PARAMS["qw_lr"] * item.get("lr", 0.05) +
-            _SIM_PARAMS["qw_awt"] * item.get("awt", 0.0)
+            _SIM_PARAMS["qw_ctr"]   * item.get("ctr", 0.1) +
+            _SIM_PARAMS["qw_lr"]    * item.get("lr", 0.05) +
+            _SIM_PARAMS["qw_awt"]   * item.get("awt", 0.0)
         )
         item["query_score"] = round(qs, 4)
-        item["cosine_sim"] = round(cos_ui, 4)
+        item["cosine_sim"]  = round(cos_ui, 4)
 
-    items.sort(key=lambda x: x.get("query_score", 0.0), reverse=True)
-    for i, item in enumerate(items):
+    stage1.sort(key=lambda x: x["query_score"], reverse=True)
+    for i, item in enumerate(stage1):
         item["rank"] = i + 1
+    for i, item in enumerate(rest):
+        item["rank"] = two_stage_k + i + 1
 
-    return {"items": items, "weights": w, "round": state.get("round", 0)}
+    return {"items": stage1 + rest, "weights": w, "round": state.get("round", 0)}
 
 
 @app.post("/images/upload")
@@ -409,6 +436,7 @@ async def upload_image(
     request: Request,
     file: UploadFile = File(...),
     title: str = Form(""),
+    quality: float = Form(0.3),
 ) -> dict:
     if not (file.content_type or "").startswith("image/"):
         raise HTTPException(status_code=400, detail="Only image files are supported.")
@@ -427,7 +455,7 @@ async def upload_image(
         "status": "PROCESSING",
         "category": "unknown",
         "category_idx": 0,
-        "quality": 0.3,
+        "quality": round(max(0.0, min(1.0, quality)), 4),
         "cosines": {},
         "vector": [],
         "freshness": 1.0,
@@ -482,9 +510,10 @@ def delete_image(image_id: str) -> dict:
         target = next((it for it in items if it["id"] == image_id), None)
         if not target:
             raise HTTPException(status_code=404, detail="Image not found")
-        file_path = _GALLERY_DIR / target["filename"]
-        if file_path.exists():
-            file_path.unlink()
+        if target.get("filename"):
+            file_path = _GALLERY_DIR / target["filename"]
+            if file_path.exists():
+                file_path.unlink()
         items = [it for it in items if it["id"] != image_id]
         _save_gallery(items)
     log(f"🗑️ Deleted image {image_id}")
@@ -503,14 +532,32 @@ def record_interaction(body: dict) -> dict:
         state = _load_sim_state()
         fb = state.setdefault("pending_feedback", {})
         entry = fb.setdefault(image_id, {"view": 0, "like": 0, "watch": 0.0})
-        if action == "view":
+        if action == "examine":
+            entry["examine"] = entry.get("examine", 0) + 1
+        elif action == "view":
             entry["view"] = 1
+            entry["examine"] = entry.get("examine", 0) + 1
             entry["watch"] = max(entry["watch"], 0.3)
         elif action == "like":
             entry["like"] = 1
             entry["view"] = 1
+            entry["examine"] = entry.get("examine", 0) + 1
             entry["watch"] = max(entry["watch"], 0.6)
         _save_sim_state(state)
+
+    # Update display counters in gallery (separate from sim feedback)
+    if action in ("view", "like"):
+        with _gallery_lock:
+            imgs = _load_gallery()
+            for img in imgs:
+                if img["id"] == image_id:
+                    if action == "view":
+                        img["total_views"] = img.get("total_views", 0) + 1
+                    elif action == "like":
+                        img["total_likes"] = img.get("total_likes", 0) + 1
+                        img["total_views"] = img.get("total_views", 0) + 1
+                    break
+            _save_gallery(imgs)
 
     return {"ok": True}
 
@@ -550,10 +597,12 @@ def sim_init(body: dict) -> dict:
                 cat = str(raw.get("category", "cat")).lower()
                 cat_idx = QUERY_LABELS.index(cat) if cat in QUERY_LABELS else 0
                 cosines = {str(k): float(v) for k, v in raw.get("cosine_by_query", {}).items()}
+                rel_path = raw.get("relative_path", "")
                 new_items.append({
                     "id": f"ds_{idx}",
-                    "title": f"{cat} #{idx}",
+                    "title": rel_path.split("/")[-1] if rel_path else f"{cat} #{idx}",
                     "filename": "",
+                    "relative_path": rel_path,
                     "status": "INDEXED",
                     "category": cat,
                     "category_idx": cat_idx,
@@ -564,6 +613,7 @@ def sim_init(body: dict) -> dict:
                     "arrival_time": 0,
                     "tilde_e": 0.0, "tilde_v": 0.0, "tilde_l": 0.0,
                     "ctr": 0.1, "lr": 0.05, "awt": 0.0, "social_proof": 0.0,
+                    "total_views": 0, "total_likes": 0,
                     "created_at": _now(),
                     "is_dataset": True,
                 })
@@ -612,6 +662,9 @@ def sim_step() -> dict:
         w = state.get("weights", _DEFAULT_SIM_STATE["weights"])
         p = dict(_SIM_PARAMS)
         p["t"] = state.get("round", 0) + 1
+        custom = state.get("custom_params", {})
+        if custom:
+            p.update(custom)
         pending_fb = state.pop("pending_feedback", {})
         updated, w, avg_r = _run_one_round(items, w, rng, p, real_user_feedback=pending_fb if pending_fb else None)
         _save_gallery(updated)
@@ -623,6 +676,19 @@ def sim_step() -> dict:
     _save_sim_state(state)
     log(f"[Sim] Manual step round {p['t']}, reward={avg_r:.4f}")
     return {"ok": True, "round": p["t"], "reward": avg_r}
+
+
+@app.post("/sim/set_params")
+def sim_set_params(body: dict) -> dict:
+    """Persist custom behaviour parameters (alpha_q, gamma_q, delta_q, batch_size, user_sigma)."""
+    allowed = {"alpha_q", "gamma_q", "delta_q", "batch_size", "user_sigma"}
+    state = _load_sim_state()
+    custom = state.setdefault("custom_params", {})
+    for k, v in body.items():
+        if k in allowed:
+            custom[k] = float(v) if k != "batch_size" else int(v)
+    _save_sim_state(state)
+    return {"ok": True, "custom_params": custom}
 
 
 @app.post("/sim/reset")
@@ -712,6 +778,8 @@ def sim_load_preset() -> dict:
                         "lr": float(row.get("lr", 0.05)),
                         "awt": float(row.get("awt", 0.0)),
                         "freshness": float(row.get("freshness", 0.0)),
+                        "total_views": int(float(row.get("cum_views", 0))),
+                        "total_likes": int(float(row.get("cum_likes", 0))),
                     }
 
     state = _load_sim_state()
