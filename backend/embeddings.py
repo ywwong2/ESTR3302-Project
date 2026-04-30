@@ -89,8 +89,6 @@ def embed_image(file_path: Path) -> list[float]:
 
 def embed_query_text(query: str, cache_path: Path | None = None) -> list[float]:
     """Embed a text query. Reads/writes cache_path (query_cache.json) if provided."""
-    import torch
-
     key = query.strip().lower()
 
     if cache_path and cache_path.exists():
@@ -101,6 +99,7 @@ def embed_query_text(query: str, cache_path: Path | None = None) -> list[float]:
     else:
         cache = {}
 
+    import torch
     _log(f"[SigLIP] Embedding text query: '{key[:80]}'")
     t0 = time.time()
     model, processor = _load_siglip()

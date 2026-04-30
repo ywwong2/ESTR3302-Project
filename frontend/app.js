@@ -11,19 +11,15 @@ const searchInput  = document.getElementById('searchInput');
 const titleInput   = document.getElementById('titleInput');
 const fileInput    = document.getElementById('fileInput');
 const roundBadge   = document.getElementById('roundBadge');
-const rewardBadge  = document.getElementById('rewardBadge');
 const simRound     = document.getElementById('simRound');
-const simReward    = document.getElementById('simReward');
 const runBtn       = document.getElementById('runBtn');
 const intervalSlider = document.getElementById('intervalSlider');
 const intervalVal  = document.getElementById('intervalVal');
-const weightBars   = document.getElementById('weightBars');
 const countdownEl  = document.getElementById('countdown');
 const modal        = document.getElementById('modal');
 const modalBody    = document.getElementById('modalBody');
 const debugLogEl   = document.getElementById('debugLog');
 
-const WEIGHT_LABELS = ['cos', 'fresh', 'lr', 'ctr', 'awt', 'social'];
 let currentItems = [];
 let simRunning = false;
 let logSince = 0;
@@ -129,45 +125,21 @@ function setParams() {
       delta_q:    parseFloat(document.getElementById('deltaqSlider').value),
       batch_size: parseInt(document.getElementById('batchSlider').value),
       user_sigma: parseFloat(document.getElementById('sigmaSlider').value),
+      qw_cos:     parseFloat(document.getElementById('wCosSlider').value),
+      qw_match:   parseFloat(document.getElementById('wMatchSlider').value),
+      qw_fresh:   parseFloat(document.getElementById('wFreshSlider').value),
+      qw_ctr:     parseFloat(document.getElementById('wCtrSlider').value),
+      qw_lr:      parseFloat(document.getElementById('wLrSlider').value),
+      qw_awt:     parseFloat(document.getElementById('wAwtSlider').value),
     }),
   }).catch(() => {});
-}
-
-// ── Weight bars (in-place update) ─────────────────────────────
-function renderWeights(weights) {
-  if (!weights || !weights.length) return;
-  const maxW = Math.max(...weights, 0.01);
-
-  if (weightBars.children.length !== weights.length) {
-    weightBars.innerHTML = '';
-    weights.forEach((w, i) => {
-      const row = document.createElement('div');
-      row.className = 'weight-row';
-      row.innerHTML = `
-        <span class="weight-label">${WEIGHT_LABELS[i]}</span>
-        <div class="weight-track"><div class="weight-fill" style="width:${(w/maxW)*100}%"></div></div>
-        <span class="weight-val">${w.toFixed(3)}</span>`;
-      weightBars.appendChild(row);
-    });
-    return;
-  }
-  weights.forEach((w, i) => {
-    const row = weightBars.children[i];
-    if (!row) return;
-    row.querySelector('.weight-fill').style.width = `${(w/maxW)*100}%`;
-    row.querySelector('.weight-val').textContent = w.toFixed(3);
-  });
 }
 
 // ── Sim status display ───────────────────────────────────────
 function updateSimStatus(data) {
   const round = data.round ?? 0;
-  const reward = data.last_reward;
   roundBadge.textContent = `Round ${round}`;
   simRound.textContent = round;
-  simReward.textContent = reward !== undefined && reward !== null ? reward.toFixed(4) : '—';
-  rewardBadge.textContent = reward !== undefined && reward !== null ? `Reward: ${reward.toFixed(4)}` : '';
-  if (data.weights) renderWeights(data.weights);
 }
 
 // ── Search ────────────────────────────────────────────────────
@@ -385,8 +357,12 @@ function renderGrid(items) {
 async function viewImage(item) {
   await interact(item.id, 'view');
 
+  // Optimistically increment displayed view count
+  item.total_views = (item.total_views || 0) + 1;
+
   // Build modal with like button inside
   modalBody.innerHTML = '';
+  let _modalLiked = false;
 
   const titleEl = document.createElement('h3');
   titleEl.style.marginBottom = '12px';
@@ -409,6 +385,10 @@ async function viewImage(item) {
   const likesCount = (item.total_likes || 0);
   likeBtn.innerHTML = `👍 Like &nbsp;<span class="modal-likes-count" style="font-weight:700">${likesCount}</span>`;
   likeBtn.addEventListener('click', () => {
+    if (_modalLiked) return;
+    _modalLiked = true;
+    likeBtn.disabled = true;
+    likeBtn.textContent = '👍 Liked ✓';
     const span = likeBtn.querySelector('.modal-likes-count');
     if (span) span.textContent = parseInt(span.textContent || 0) + 1;
     // Also update card counter
@@ -554,7 +534,54 @@ async function pollDebugLogs() {
   } catch (e) {}
 }
 
+// ── Categories ────────────────────────────────────────────────
+let _categories = [];
+
+async function loadCategories() {
+  try {
+    const res = await fetch(`${API}/categories`);
+    if (!res.ok) return;
+    const data = await res.json();
+    _categories = data.categories || [];
+    renderCatChips();
+  } catch (e) {}
+}
+
+function renderCatChips() {
+  const container = document.getElementById('catChips');
+  if (!container) return;
+  container.innerHTML = '<span class="chip-label">Categories:</span>';
+  const icons = { cat: '🐱', dog: '🐶', plane: '✈️', clothes: '👗', car: '🚗' };
+  _categories.forEach(cat => {
+    const btn = document.createElement('button');
+    btn.className = 'chip';
+    btn.dataset.q = cat;
+    btn.textContent = `${icons[cat] || '🔖'} ${cat}`;
+    btn.onclick = () => quickSearch(cat);
+    container.appendChild(btn);
+  });
+}
+
+async function addCategory() {
+  const input = document.getElementById('newCatInput');
+  const cat = (input.value || '').trim().toLowerCase();
+  if (!cat) return;
+  try {
+    const res = await fetch(`${API}/categories`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ category: cat }),
+    });
+    if (!res.ok) throw new Error();
+    input.value = '';
+    await loadCategories();
+  } catch (e) {
+    alert('Failed to add category.');
+  }
+}
+
 // ── Boot ──────────────────────────────────────────────────────
 refreshAll();
+loadCategories();
 setInterval(pollStatus, 2000);
 setInterval(pollDebugLogs, 1500);

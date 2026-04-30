@@ -39,8 +39,9 @@ _GALLERY_DIR = _FRONTEND_DIR / "gallery"
 _GALLERY_JSON = _FRONTEND_DIR / "gallery.json"
 _SIM_STATE_JSON = _FRONTEND_DIR / "sim_state.json"
 _QUERY_CACHE_JSON = _FRONTEND_DIR / "query_cache.json"
+_CATEGORIES_JSON = _FRONTEND_DIR / "categories.json"
 
-_EXPERIMENT_DIR = _BASE / "data" / "final_search_first_v3_twostage_injection_v5_fixed"
+_EXPERIMENT_DIR = _BASE / "data" / "exp_bayesian_defended"
 _DATASET_CACHE = _BASE.parent / "dataset" / "cosine_cache_siglip.json"
 
 # ── Gallery helpers ────────────────────────────────────────────
@@ -60,6 +61,19 @@ def _load_gallery() -> list[dict]:
 
 def _save_gallery(items: list[dict]) -> None:
     _GALLERY_JSON.write_text(json.dumps(items, indent=2), encoding="utf-8")
+
+
+_CATEGORIES_LOCK = threading.Lock()
+
+
+def _load_categories() -> list[str]:
+    if _CATEGORIES_JSON.exists():
+        return json.loads(_CATEGORIES_JSON.read_text(encoding="utf-8"))
+    return list(QUERY_LABELS)
+
+
+def _save_categories(cats: list[str]) -> None:
+    _CATEGORIES_JSON.write_text(json.dumps(cats, indent=2), encoding="utf-8")
 
 
 def _gallery_get(image_id: str) -> dict | None:
@@ -179,7 +193,8 @@ def _run_one_round(
     grad = [0.0] * 6
 
     users_per_round = p["batch_size"]
-    num_query_cats = len(QUERY_LABELS)
+    cats = _load_categories()
+    num_query_cats = len(cats)
 
     all_interactions = list(range(users_per_round))
     if real_user_feedback:
@@ -187,8 +202,8 @@ def _run_one_round(
 
     for uid in all_interactions:
         is_real = uid == "real_user"
-        q_label = QUERY_LABELS[rng.randrange(num_query_cats)]
-        q_cat = QUERY_LABELS.index(q_label)
+        q_label = cats[rng.randrange(num_query_cats)]
+        q_cat = cats.index(q_label)
 
         cos_vals = [float(img.get("cosines", {}).get(q_label, 0.0)) for img in items]
 
@@ -393,7 +408,8 @@ def list_images(request: Request, q: str = "") -> dict:
         return {"items": items, "weights": w, "round": state.get("round", 0)}
 
     q_vec = embed_query_text(q, cache_path=_QUERY_CACHE_JSON)
-    q_cat_idx = QUERY_LABELS.index(q) if q in QUERY_LABELS else -1
+    cats = _load_categories()
+    q_cat_idx = cats.index(q) if q in cats else -1
 
     # Stage 1: score all by cosine, keep top-K
     for item in items:
@@ -408,16 +424,22 @@ def list_images(request: Request, q: str = "") -> dict:
     rest   = items_by_cos[two_stage_k:]
 
     # Stage 2: re-rank stage1 by quality score (with match bonus)
+    qw_cos = float(state.get("custom_params", {}).get("qw_cos", _SIM_PARAMS["qw_cos"]))
+    qw_match = float(state.get("custom_params", {}).get("qw_match", _SIM_PARAMS["qw_match"]))
+    qw_fresh = float(state.get("custom_params", {}).get("qw_fresh", _SIM_PARAMS["qw_fresh"]))
+    qw_ctr = float(state.get("custom_params", {}).get("qw_ctr", _SIM_PARAMS["qw_ctr"]))
+    qw_lr = float(state.get("custom_params", {}).get("qw_lr", _SIM_PARAMS["qw_lr"]))
+    qw_awt = float(state.get("custom_params", {}).get("qw_awt", _SIM_PARAMS["qw_awt"]))
     for item in stage1:
         cos_ui = item["_cos"]
         match = 1.0 if item.get("category_idx", -1) == q_cat_idx else 0.0
         qs = (
-            _SIM_PARAMS["qw_cos"]   * cos_ui +
-            _SIM_PARAMS["qw_match"] * match +
-            _SIM_PARAMS["qw_fresh"] * item.get("freshness", 0.5) +
-            _SIM_PARAMS["qw_ctr"]   * item.get("ctr", 0.1) +
-            _SIM_PARAMS["qw_lr"]    * item.get("lr", 0.05) +
-            _SIM_PARAMS["qw_awt"]   * item.get("awt", 0.0)
+            qw_cos   * cos_ui +
+            qw_match * match +
+            qw_fresh * item.get("freshness", 0.5) +
+            qw_ctr   * item.get("ctr", 0.1) +
+            qw_lr    * item.get("lr", 0.05) +
+            qw_awt   * item.get("awt", 0.0)
         )
         item["query_score"] = round(qs, 4)
         item["cosine_sim"]  = round(cos_ui, 4)
@@ -473,21 +495,25 @@ async def upload_image(
     def _bg(iid: str, fpath: Path, sname: str) -> None:
         try:
             vec = embed_image(fpath)
-            cosines = compute_cosines_for_image(vec, cache_path=_QUERY_CACHE_JSON)
-            cat = detect_category(cosines)
-            cat_idx = QUERY_LABELS.index(cat) if cat in QUERY_LABELS else 0
+            cats = _load_categories()
+            cosines: dict[str, float] = {}
+            for cat in cats:
+                q_vec = embed_query_text(cat, cache_path=_QUERY_CACHE_JSON)
+                cosines[cat] = round(cosine_similarity(vec, q_vec), 6)
+            best_cat = max(cosines, key=cosines.get) if cosines else "unknown"
+            cat_idx = cats.index(best_cat) if best_cat in cats else 0
             with _gallery_lock:
                 imgs = _load_gallery()
                 for img in imgs:
                     if img["id"] == iid:
                         img["vector"] = vec
                         img["cosines"] = cosines
-                        img["category"] = cat
+                        img["category"] = best_cat
                         img["category_idx"] = cat_idx
                         img["status"] = "INDEXED"
                         break
                 _save_gallery(imgs)
-            log(f"✅ Indexed: {sname} → category={cat}")
+            log(f"✅ Indexed: {sname} → category={best_cat}")
         except Exception as exc:
             log(f"❌ Embedding failed for {sname}: {exc}")
             with _gallery_lock:
@@ -569,6 +595,31 @@ def search(request: Request, q: str = "") -> dict:
     return list_images(request, q=q)
 
 
+@app.get("/categories")
+def get_categories() -> dict:
+    return {"categories": _load_categories()}
+
+
+@app.post("/categories")
+def add_category(body: dict) -> dict:
+    cat = body.get("category", "").strip().lower()
+    if not cat:
+        raise HTTPException(status_code=400, detail="Category name required")
+    with _CATEGORIES_LOCK:
+        cats = _load_categories()
+        if cat in cats:
+            return {"ok": True, "categories": cats}
+        # Embed and cache the new category text so future searches can use it
+        try:
+            embed_query_text(cat, cache_path=_QUERY_CACHE_JSON)
+        except Exception:
+            pass
+        cats.append(cat)
+        _save_categories(cats)
+        log(f"[Categories] Added '{cat}'")
+    return {"ok": True, "categories": cats}
+
+
 # ── Simulation control ─────────────────────────────────────────
 
 @app.get("/sim/status")
@@ -580,7 +631,6 @@ def sim_status() -> dict:
         "interval": state.get("interval", 5),
         "pool_mode": state.get("pool_mode"),
         "weights": state.get("weights", _DEFAULT_SIM_STATE["weights"]),
-        "last_reward": state.get("last_reward"),
     }
 
 
@@ -680,8 +730,9 @@ def sim_step() -> dict:
 
 @app.post("/sim/set_params")
 def sim_set_params(body: dict) -> dict:
-    """Persist custom behaviour parameters (alpha_q, gamma_q, delta_q, batch_size, user_sigma)."""
-    allowed = {"alpha_q", "gamma_q", "delta_q", "batch_size", "user_sigma"}
+    """Persist custom behaviour parameters and ranking weights."""
+    allowed = {"alpha_q", "gamma_q", "delta_q", "batch_size", "user_sigma",
+               "qw_cos", "qw_match", "qw_fresh", "qw_ctr", "qw_lr", "qw_awt"}
     state = _load_sim_state()
     custom = state.setdefault("custom_params", {})
     for k, v in body.items():

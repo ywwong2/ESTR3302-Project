@@ -17,7 +17,6 @@
           <span id="roundBadge" class="round-badge">Round 0</span>
         </div>
         <div class="topbar-right">
-          <span id="rewardBadge" class="reward-badge"></span>
         </div>
       </header>
 
@@ -40,9 +39,6 @@
             <div class="sim-stat-row">
               <span>Round</span><strong id="simRound">0</strong>
             </div>
-            <div class="sim-stat-row">
-              <span>Reward</span><strong id="simReward">—</strong>
-            </div>
             <div class="sim-controls">
               <button id="runBtn" class="btn-toggle btn-start" onclick="toggleSim()">▶ Run</button>
               <button class="btn-sm btn-danger" onclick="resetSim()">↺ Reset</button>
@@ -55,7 +51,35 @@
                 <span id="intervalVal">5s</span>
               </div>
             </label>
-            <div class="weight-bars" id="weightBars"></div>
+          </section>
+
+          <!-- Ranking Weights -->
+          <section class="panel weights-panel">
+            <h2>Ranking Weights</h2>
+            <div class="bhv-row">
+              <label>w_cos <span id="wCosVal">1.0</span></label>
+              <input id="wCosSlider" type="range" min="0" max="10" step="0.1" value="1.0" oninput="document.getElementById('wCosVal').textContent=parseFloat(this.value).toFixed(1);setParams();" />
+            </div>
+            <div class="bhv-row">
+              <label>w_match <span id="wMatchVal">2.0</span></label>
+              <input id="wMatchSlider" type="range" min="0" max="10" step="0.1" value="2.0" oninput="document.getElementById('wMatchVal').textContent=parseFloat(this.value).toFixed(1);setParams();" />
+            </div>
+            <div class="bhv-row">
+              <label>w_fresh <span id="wFreshVal">0.5</span></label>
+              <input id="wFreshSlider" type="range" min="0" max="10" step="0.1" value="0.5" oninput="document.getElementById('wFreshVal').textContent=parseFloat(this.value).toFixed(1);setParams();" />
+            </div>
+            <div class="bhv-row">
+              <label>w_ctr <span id="wCtrVal">0.5</span></label>
+              <input id="wCtrSlider" type="range" min="0" max="10" step="0.1" value="0.5" oninput="document.getElementById('wCtrVal').textContent=parseFloat(this.value).toFixed(1);setParams();" />
+            </div>
+            <div class="bhv-row">
+              <label>w_lr <span id="wLrVal">5.0</span></label>
+              <input id="wLrSlider" type="range" min="0" max="10" step="0.1" value="5.0" oninput="document.getElementById('wLrVal').textContent=parseFloat(this.value).toFixed(1);setParams();" />
+            </div>
+            <div class="bhv-row">
+              <label>w_awt <span id="wAwtVal">2.0</span></label>
+              <input id="wAwtSlider" type="range" min="0" max="10" step="0.1" value="2.0" oninput="document.getElementById('wAwtVal').textContent=parseFloat(this.value).toFixed(1);setParams();" />
+            </div>
           </section>
 
           <!-- User Behaviour -->
@@ -93,13 +117,6 @@
             </div>
           </section>
 
-          <!-- Preset -->
-          <section class="panel preset-panel">
-            <h2>Experiment Preset</h2>
-            <p class="hint">Pre-run 1000-round experiment results.</p>
-            <button class="btn-secondary" onclick="openPreset()">📊 View Figures</button>
-          </section>
-
           <!-- Debug log -->
           <section class="panel debug-panel">
             <div class="debug-header">
@@ -120,14 +137,14 @@
               <button class="btn-primary" onclick="doSearch()">Search</button>
               <button class="btn-secondary" onclick="doSearch('')">All</button>
             </div>
-            <div class="cat-chips">
-              <span class="chip-label">Experiment categories:</span>
-              <button class="chip" data-q="cat"     onclick="quickSearch('cat')">🐱 cat</button>
-              <button class="chip" data-q="dog"     onclick="quickSearch('dog')">🐶 dog</button>
-              <button class="chip" data-q="plane"   onclick="quickSearch('plane')">✈️ plane</button>
-              <button class="chip" data-q="clothes" onclick="quickSearch('clothes')">👗 clothes</button>
-              <button class="chip" data-q="car"     onclick="quickSearch('car')">🚗 car</button>
+            <div class="cat-chips" id="catChips">
+              <span class="chip-label">Categories:</span>
             </div>
+            <div class="add-cat-row">
+              <input id="newCatInput" type="text" placeholder="New category…" />
+              <button class="btn-sm btn-secondary" onclick="addCategory()">+ Add</button>
+            </div>
+            <p class="cat-hint">Please add a category tag for new kinds of images <em>before</em> uploading them (e.g., "food", "sports").</p>
             <div class="upload-row">
               <input id="titleInput" type="text" placeholder="Title (optional)" />
               <input id="qualityInput" type="number" min="0" max="1" step="0.05" placeholder="Quality 0–1 (optional)" />

@@ -45,18 +45,40 @@ ESTR3302-Project/
 - Python 3.11+ (tested on 3.12)
 - ~400 MB disk for the SigLIP model (only needed for the GUI; experiments use a pre-computed cosine cache)
 
-### 1. Create virtual environment
+### 1. Create virtual environment (choose one)
 
+**Option A — `venv` (standard library):**
 ```bash
 python3 -m venv .venv
+source .venv/bin/activate      # macOS / Linux
+# .venv\Scripts\activate       # Windows
+```
+
+**Option B — `conda`:**
+```bash
+conda create -n estr3302 python=3.12
+conda activate estr3302
+```
+
+**Option C — `uv` (fast):**
+```bash
+uv venv .venv
 source .venv/bin/activate      # macOS / Linux
 ```
 
 ### 2. Install dependencies
 
+**All packages at once (recommended):**
 ```bash
 pip install -r backend/requirements.txt
 ```
+
+**If you only need to run experiments (no GUI, no model download):**
+```bash
+pip install pandas matplotlib
+```
+
+> **Note:** `torch` and `transformers` are large downloads (~2 GB combined). If you only run the report reproduction scripts, you can skip them. The GUI and image-upload feature require the full dependency set.
 
 ### 3. (Optional) Download SigLIP model — only for GUI / re-generating cosine cache
 
