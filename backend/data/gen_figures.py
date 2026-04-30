@@ -13,8 +13,8 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 
 # ── paths ────────────────────────────────────────────────────────
-SRC  = Path(__file__).parent / "final_search_first_v3_twostage_injection_v5_fixed"
-OUT  = Path(__file__).parent / "exp_bayesian_defended"
+SRC  = Path(__file__).parent / "exp_bayesian_defended"
+OUT  = SRC  # figures are written alongside the CSVs
 OUT.mkdir(parents=True, exist_ok=True)
 
 qr  = pd.read_csv(SRC / "query_ranks.csv")

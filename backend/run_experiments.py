@@ -262,12 +262,12 @@ def plot_exp1() -> None:
 
     # ── Plot B: CTR/LR over time for injected images ──
     bay_stats = load_item_stats(BAYESIAN_DEF_DIR)
-    freq_stats = load_item_stats(EXP1_DIR)
+    freq_stats = load_item_stats(EXP1_FREQ30_DIR)
 
     fig, axes = plt.subplots(2, 1, figsize=(10, 7), sharex=True)
     for metric_idx, (metric, ax) in enumerate(zip(["ctr", "lr"], axes)):
         for idx, iid in enumerate(injected):
-            for src, src_label, ls in [(bay_stats, "Bayesian", "-"), (freq_stats, "Freq", "--")]:
+            for src, src_label, ls in [(bay_stats, "Bayesian", "-"), (freq_stats, "Freq W=30", "--")]:
                 rows = src.get(iid, [])
                 rows = [r for r in rows if r["round"] >= 500]
                 if not rows:
@@ -279,7 +279,7 @@ def plot_exp1() -> None:
         ax.set_ylabel(metric.upper(), fontsize=11)
         ax.grid(alpha=0.25)
     axes[0].legend(loc="upper right", fontsize=7.5, ncol=2)
-    axes[0].set_title("Cold-Start Metric Stability: Bayesian (solid) vs Frequency (dashed)", fontsize=12)
+    axes[0].set_title("Cold-Start Metric Stability: Bayesian (solid) vs Frequency W=30 (dashed)", fontsize=12)
     axes[1].set_xlabel("Round", fontsize=11)
     fig.tight_layout()
     out_path = EXP1_DIR / "fig_cold_start_metrics.png"
@@ -694,28 +694,41 @@ def _plot_exp3_defended(plt, natural_avg_engagement: float) -> None:
 #  Main
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+def run_gen_figures() -> None:
+    """Run gen_figures.py to produce ranking-performance & appendix figures."""
+    gen_fig = ROOT / "backend" / "data" / "gen_figures.py"
+    print(f"\n── Running gen_figures.py ──")
+    subprocess.run([PYTHON, str(gen_fig)], cwd=str(ROOT), check=True)
+    print("  ✅ gen_figures done")
+
+
 def main() -> None:
     target = sys.argv[1] if len(sys.argv) > 1 else "all"
 
+    # ── Simulations ──
     if target in ("all", "exp1"):
         run_exp1()
-    if target in ("all", "exp2"):
-        run_exp2()
+    if target in ("all", "exp1_defended"):
+        run_exp1_defended()
     if target in ("all", "exp3"):
         run_exp3()
     if target == "exp3d":
         run_exp3d()
 
-    # Generate plots
+    # ── Plots ──
     if target in ("all", "exp1", "plots"):
         print("\n── Generating Exp 1 plots ──")
         plot_exp1()
-    if target in ("all", "exp2", "plots"):
-        print("\n── Generating Exp 2 plots ──")
-        plot_exp2()
+    if target in ("all", "exp1_defended", "plots"):
+        print("\n── Generating Exp 1 defended plot ──")
+        plot_exp1_defended()
     if target in ("all", "exp3", "exp3d", "plots"):
         print("\n── Generating Exp 3 plots ──")
         plot_exp3()
+
+    # ── Ranking-performance & appendix figures ──
+    if target in ("all", "figures"):
+        run_gen_figures()
 
     print("\n✅ All done!")
 
