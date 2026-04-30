@@ -6,6 +6,9 @@ Content–query matching is handled by SigLIP embeddings; the ranking
 system uses fixed-weight scoring with Bayesian-smoothed engagement
 statistics and integrity defenses (velocity clamp + trust ramp).
 
+<img width="1470" height="833" alt="Screenshot 2026-04-30 at 11 44 34 PM" src="https://github.com/user-attachments/assets/9c27cff6-8edd-4b16-9e5e-df5fd8774ec7" />
+
+
 ## Project Structure
 
 ```
