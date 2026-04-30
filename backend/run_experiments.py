@@ -26,6 +26,9 @@ CACHE = "dataset/cosine_cache_siglip.json"
 BAYESIAN_DIR = ROOT / "backend" / "data" / "final_search_first_v3_twostage_injection_v5_fixed"
 BAYESIAN_DEF_DIR = ROOT / "backend" / "data" / "exp_bayesian_defended"
 EXP1_DIR = ROOT / "backend" / "data" / "exp_bayesian_vs_freq"
+EXP1_FREQ10_DIR = ROOT / "backend" / "data" / "exp_bayesian_vs_freq_w10"
+EXP1_FREQ30_DIR = ROOT / "backend" / "data" / "exp_bayesian_vs_freq_w30"
+EXP1_DEFENDED_DIR = ROOT / "backend" / "data" / "exp_bayesian_trust_ramp"
 EXP2_DIR = ROOT / "backend" / "data" / "exp_drift"
 EXP3_DIR = ROOT / "backend" / "data" / "exp_synthetic"
 
@@ -71,18 +74,93 @@ def run_sim(extra_args: list[str], label: str) -> None:
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def run_exp1() -> None:
-    # Bayesian + defense
+    # Bayesian smoothing (no defense — isolate update rule)
     run_sim([
         "--inject-images", "--inject-round", "501", "--inject-category", "cat",
-        "--velocity-clamp", "2.0", "--trust-ramp-period", "200",
         "--out-dir", str(BAYESIAN_DEF_DIR),
-    ], "Exp 1: Bayesian + defense")
-    # Frequency baseline
+    ], "Exp 1: Bayesian smoothing")
+    # Frequency baseline W=50 (no defense — isolate update rule)
     run_sim([
         "--inject-images", "--inject-round", "501", "--inject-category", "cat",
         "--frequency-update", "--frequency-window", "50",
         "--out-dir", str(EXP1_DIR),
-    ], "Exp 1: Frequency baseline")
+    ], "Exp 1: Frequency baseline W=50")
+    # Frequency baseline W=30
+    run_sim([
+        "--inject-images", "--inject-round", "501", "--inject-category", "cat",
+        "--frequency-update", "--frequency-window", "30",
+        "--out-dir", str(EXP1_FREQ30_DIR),
+    ], "Exp 1: Frequency baseline W=30")
+    # Frequency baseline W=10
+    run_sim([
+        "--inject-images", "--inject-round", "501", "--inject-category", "cat",
+        "--frequency-update", "--frequency-window", "10",
+        "--out-dir", str(EXP1_FREQ10_DIR),
+    ], "Exp 1: Frequency baseline W=10")
+
+
+def run_exp1_defended() -> None:
+    """Standalone: Bayesian smoothing + trust ramp (production config, with injection)."""
+    run_sim([
+        "--inject-images", "--inject-round", "501", "--inject-category", "cat",
+        "--trust-ramp-period", "200",
+        "--out-dir", str(EXP1_DEFENDED_DIR),
+    ], "Exp 1b: Bayesian + Trust Ramp")
+
+
+def plot_exp1_defended() -> None:
+    """Single-panel rank-trajectory plot for Bayesian + trust ramp."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    def load_query_ranks(base: Path, query: str) -> dict[int, list[dict]]:
+        data: dict[int, list[dict]] = defaultdict(list)
+        with (base / "query_ranks.csv").open("r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                if row["query_label"] == query:
+                    data[int(row["image_id"])].append(
+                        {"round": int(row["round"]), "rank": int(row["rank"])}
+                    )
+        return data
+
+    def moving_avg(vals: list[float], w: int = 10) -> list[float]:
+        out = []
+        for i in range(len(vals)):
+            s = max(0, i - w + 1)
+            out.append(sum(vals[s:i+1]) / (i - s + 1))
+        return out
+
+    injected = [50, 51, 52]
+    labels_q = ["high (q=0.4)", "mid (q=0.25)", "low (q=0.01)"]
+    colors = ["#047857", "#7c3aed", "#b91c1c"]
+
+    ranks = load_query_ranks(EXP1_DEFENDED_DIR, "cat")
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    for idx, iid in enumerate(injected):
+        rows = [r for r in ranks.get(iid, []) if r["round"] >= 500]
+        if not rows:
+            continue
+        rr = [r["round"] for r in rows]
+        rk = [r["rank"] for r in rows]
+        ax.plot(rr, rk, color=colors[idx], alpha=0.12, linewidth=0.7)
+        ax.plot(rr, moving_avg(rk), color=colors[idx], linewidth=2.2,
+                label=f"Image {iid} ({labels_q[idx]})")
+    ax.invert_yaxis()
+    ax.set_ylim(13.5, 0.5)
+    ax.set_yticks(range(1, 14))
+    ax.set_xlabel("Round", fontsize=11)
+    ax.set_ylabel("Rank Position", fontsize=11)
+    ax.set_title("Cold-Start Rank Dynamics: Bayesian Smoothing + Trust Ramp", fontsize=12)
+    ax.legend(loc="upper right", fontsize=9)
+    ax.grid(alpha=0.25)
+    fig.tight_layout()
+    out_path = EXP1_DEFENDED_DIR / "fig_bayesian_trust_ramp.png"
+    fig.savefig(out_path, dpi=160)
+    plt.close(fig)
+    print(f"Saved: {out_path}")
 
 
 def plot_exp1() -> None:
@@ -130,29 +208,48 @@ def plot_exp1() -> None:
 
     # ── Plot A: Side-by-side rank dynamics ──
     bay_ranks = load_query_ranks(BAYESIAN_DEF_DIR, "cat")
-    freq_ranks = load_query_ranks(EXP1_DIR, "cat")
+    freq30_ranks = load_query_ranks(EXP1_FREQ30_DIR, "cat")
+    freq10_ranks = load_query_ranks(EXP1_FREQ10_DIR, "cat")
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5), sharey=True)
-    for panel, data, title, ax in [
-        ("Bayesian", bay_ranks, "Bayesian + Defense", ax1),
-        ("Frequency", freq_ranks, "Frequency (Window=50)", ax2),
-    ]:
+
+    # LHS: Bayesian — solid lines
+    for idx, iid in enumerate(injected):
+        rows = [r for r in bay_ranks.get(iid, []) if r["round"] >= 500]
+        if not rows:
+            continue
+        rounds = [r["round"] for r in rows]
+        ma = moving_avg([r["rank"] for r in rows])
+        ax1.plot(rounds, ma, color=colors[idx], linewidth=2.2,
+                 label=f"Image {iid} ({labels_q[idx]})")
+    ax1.set_title("Bayesian Smoothing", fontsize=12)
+
+    # RHS: W=30 solid, W=10 dotted; same color per image
+    variants = [
+        (freq30_ranks, "-",  2.2, "W=30"),
+        (freq10_ranks, ":",  2.0, "W=10"),
+    ]
+    for freq_ranks, ls, lw, wlabel in variants:
         for idx, iid in enumerate(injected):
-            rows = data.get(iid, [])
-            rows = [r for r in rows if r["round"] >= 500]
+            rows = [r for r in freq_ranks.get(iid, []) if r["round"] >= 500]
             if not rows:
                 continue
             rounds = [r["round"] for r in rows]
-            ranks = [r["rank"] for r in rows]
-            ma = moving_avg(ranks)
-            ax.plot(rounds, ranks, color=colors[idx], alpha=0.12, linewidth=0.7)
-            ax.plot(rounds, ma, color=colors[idx], linewidth=2.2,
-                    label=f"Image {iid} ({labels_q[idx]})")
+            ma = moving_avg([r["rank"] for r in rows])
+            if ls == "-":
+                label = f"Image {iid} ({labels_q[idx]}) W=30"
+            elif idx == 0:
+                label = "W=10 (dotted)"
+            else:
+                label = None
+            ax2.plot(rounds, ma, color=colors[idx], linestyle=ls, linewidth=lw, label=label)
+    ax2.set_title("Frequency (solid=W=30, dotted=W=10)", fontsize=12)
+
+    for ax in (ax1, ax2):
         ax.invert_yaxis()
         ax.set_ylim(13.5, 0.5)
         ax.set_yticks(range(1, 14))
         ax.set_xlabel("Round", fontsize=11)
-        ax.set_title(title, fontsize=12)
         ax.legend(loc="upper right", fontsize=8)
         ax.grid(alpha=0.25)
     ax1.set_ylabel("Rank Position", fontsize=11)
